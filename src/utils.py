@@ -4,14 +4,21 @@ from enum import Enum
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 8888
 
+class NodeState(Enum):
+    LEADER = "leader"
+    FOLLOWER = "follower"
+    CANDIDATE = "candidate"
+
 
 class MessageTypes(Enum):
     PUBLISH = "publish"
     SUBSCRIBE = "subscribe"
+    HEARTBEAT = "heartbeat"
+    ACK = "ack"
 
 
 class Message:
-    def __init__(self, type: MessageTypes, topic: str, content: str):
+    def __init__(self, type: MessageTypes, topic: str = "", content: str = ""):
         self.type = type
         self.topic = topic
         self.content = content
