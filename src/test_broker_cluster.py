@@ -20,9 +20,9 @@ def main():
     host_ips = [(DEFAULT_HOST, DEFAULT_PORT), (DEFAULT_HOST, DEFAULT_PORT + 1)]
     brokers: List[Broker] = []
 
-    broker1 = Broker(host=host_ips[0][0], port=host_ips[0][1], peers=[host_ips[1]])
+    broker1 = Broker(host=host_ips[0][0], port=host_ips[0][1], peers=[host_ips[1]], election_timeout=3)
     brokers.append(broker1)
-    broker2 = Broker(host=host_ips[1][0], port=host_ips[1][1], peers=[host_ips[0]])
+    broker2 = Broker(host=host_ips[1][0], port=host_ips[1][1], peers=[host_ips[0]], election_timeout=1.5)
     brokers.append(broker2)
 
     def run_broker(broker: Broker):
@@ -30,16 +30,14 @@ def main():
 
     for broker in brokers:
         threading.Thread(target=run_broker, args=(broker,)).start()
-    time.sleep(1)
+    time.sleep(5)
 
-    # TODO: the cluster has not sharing subscriber list yet, so need to be the same host_ip
     # subscriber
-    subscriber = Subscriber(*host_ips[1])
+    subscriber = Subscriber(*host_ips[0])
     subscriber.subscribe("topic1")
     threading.Thread(target=subscriber.receive).start()
     time.sleep(1)
 
-    # TODO: the cluster has not sharing subscriber list yet, so need to be the same host_ip
     # publisher
     publisher = Publisher(*host_ips[1])
     publisher.publish("topic1", "Hello, world!")

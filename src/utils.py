@@ -15,6 +15,8 @@ class MessageTypes(Enum):
     SUBSCRIBE = "subscribe"
     HEARTBEAT = "heartbeat"
     ACK = "ack"
+    REQUEST_TO_VOTE = "request_to_vote"
+    VOTE = "vote"
 
 
 class Message:
