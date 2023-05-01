@@ -15,6 +15,7 @@ class Broker(RaftNode):
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
         backlog: int = 5,
+        # list of peer host and port
         peers: List[Tuple[str, int]] = None,
         election_timeout: float = None,
     ):
@@ -27,6 +28,8 @@ class Broker(RaftNode):
         self.topic_sockets: Dict[str, Set[socket.socket]] = {}
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+    # TODO: refactor topic_socket to be topic_host_port, so that the info can be transferred to another broker node.
+    # TODO: This means `subscriber` need to spin up like a http server
     def handle_client(self, client_socket: socket.socket, address) -> None:
         """Handle client connections, for both SUBSCRIBE and PUBLISH requests
 

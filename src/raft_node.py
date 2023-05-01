@@ -17,6 +17,7 @@ class RaftNode:
         self,
         host: str,
         port: int,
+        # list of peer host and port
         peers: List[Tuple[str, int]] = None,
         election_timeout: float = None,
     ):
