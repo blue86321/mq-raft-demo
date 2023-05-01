@@ -39,6 +39,7 @@ class RaftNode:
         self.countdown_timer.start()
         self.peers: List[Tuple[str, int]] = peers or []
         self.peer_sockets: List[socket.socket] = []
+        self.active_peer_cnt = 0
         self.last_heartbeat_sent = None
         self.stopped = False
         self.leader_host_port = None
@@ -59,7 +60,7 @@ class RaftNode:
     def be_voted(self):
         self.vote_count += 1
         # become leader when receiving a majority of votes
-        if self.vote_count > len(self.peers) / 2:
+        if self.vote_count > self.active_peer_cnt / 2:
             self.logger.info(f"New leader {self.host}:{self.port}")
             self.reset_vote()
             self.state = NodeState.LEADER
@@ -158,6 +159,7 @@ class RaftNode:
         while not self.stopped and self.state == NodeState.LEADER:
             # put host and port in HEARTBEAT message
             msg = Message(MessageTypes.HEARTBEAT, self.host, str(self.port))
+            self.active_peer_cnt = 0
             for peer_host, peer_port in self.peers:
                 Thread(
                     target=self.__deal_with_one_heartbeat,
@@ -186,10 +188,11 @@ class RaftNode:
                     return
                 msg = Message.from_bytes(data)
                 self.logger.debug(f"Received ACK from {peer_host}:{peer_port}")
+                self.active_peer_cnt += 1
                 # todo: set last_ack_time for this peer
                 self.last_heartbeat_sent = time.time()
         except ConnectionRefusedError:
-            self.logger.error(f"Failed to connect to peer {peer_host}:{peer_port}")
+            pass
         except socket.timeout:
             # todo: peer fails
             pass
