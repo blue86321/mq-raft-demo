@@ -20,9 +20,9 @@ def main():
     host_ips = [(BROKER_HOST, BROKER_PORT), (BROKER_HOST, BROKER_PORT + 1)]
     brokers: List[Broker] = []
 
-    broker1 = Broker(host=host_ips[0][0], port=host_ips[0][1], peers=[host_ips[1]], election_timeout=3)
+    broker1 = Broker(host=host_ips[0][0], port=host_ips[0][1], peers=[host_ips[1]])
     brokers.append(broker1)
-    broker2 = Broker(host=host_ips[1][0], port=host_ips[1][1], peers=[host_ips[0]], election_timeout=1.5)
+    broker2 = Broker(host=host_ips[1][0], port=host_ips[1][1], peers=[host_ips[0]])
     brokers.append(broker2)
 
     def run_broker(broker: Broker):
@@ -30,7 +30,7 @@ def main():
 
     for broker in brokers:
         threading.Thread(target=run_broker, args=(broker,)).start()
-    time.sleep(5)
+    time.sleep(3)
 
     # subscriber
     subscriber = Subscriber(*host_ips[0])

@@ -28,7 +28,7 @@ class Broker(RaftNode):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def handle_client(self, client_socket: socket.socket, address) -> None:
-        """Handle client connections, include UN/SUBSCRIBE, PUBLISH, 
+        """Handle client connections, include UN/SUBSCRIBE, PUBLISH,
         and cluster message like HEARTBEAT, REQUEST_TO_VOTE
 
         Args:
@@ -79,9 +79,9 @@ class Broker(RaftNode):
                     host_port = (msg.dest_host, int(msg.dest_port))
                     self.topic_subscribers[msg.topic].discard(host_port)
         elif msg.type == MessageTypes.HEARTBEAT:
-            self.on_receive_heartbeat(client_socket, msg, datetime.datetime.now())
+            self.on_receive_heartbeat(client_socket, msg)
         elif msg.type == MessageTypes.REQUEST_TO_VOTE:
-            self.vote(client_socket, msg)
+            self.handle_request_to_vote(client_socket, msg)
 
     def run(self) -> None:
         """Start the broker and listen for client connections"""
@@ -112,8 +112,8 @@ class Broker(RaftNode):
 
     def stop(self):
         """Stop the broker properly to avoid error `OSError: [Errno 48] Address already in use`"""
-        self.set_stopped(True)
         self.server_socket.close()
+        self.set_stopped(True)
 
 
 if __name__ == "__main__":
