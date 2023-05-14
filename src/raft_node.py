@@ -19,11 +19,11 @@ class RaftNode:
         port: int,
         # list of peer host and port
         peers: List[Tuple[str, int]] = None,
-        election_timeout: float = None,
+        election_timeout: float = 0,
     ):
         self.host = host
         self.port = port
-        self.logger = logging.getLogger(__name__ + f" {self.port}")
+        self.logger = logging.getLogger(f"{__name__} {self.port}")
 
         self.state = NodeState.FOLLOWER
         self.election_term = 0
@@ -39,7 +39,7 @@ class RaftNode:
         self.countdown_timer.start()
         self.peers: List[Tuple[str, int]] = peers or []
         self.peer_sockets: List[socket.socket] = []
-        self.active_peer_cnt = 0
+        self.active_peer_cnt = len(self.peers)
         self.last_heartbeat_sent = None
         self.stopped = False
         self.leader_host_port = None
@@ -52,14 +52,14 @@ class RaftNode:
         self.voted = True
         self.vote_count += 1
         self.state = NodeState.CANDIDATE
+        self.check_become_leader()
 
     def reset_vote(self):
         self.voted = False
         self.vote_count = 0
 
-    def be_voted(self):
-        self.vote_count += 1
-        # become leader when receiving a majority of votes
+    def check_become_leader(self):
+        """become leader when receiving a majority of votes"""
         if self.vote_count > self.active_peer_cnt / 2:
             self.logger.info(f"New leader {self.host}:{self.port}")
             self.reset_vote()
@@ -109,8 +109,8 @@ class RaftNode:
         # send ACK
         client_socket.sendall(Message(MessageTypes.ACK).to_bytes())
 
-        leader_host = msg.topic
-        leader_port = int(msg.content)
+        leader_host = msg.dest_host
+        leader_port = int(msg.dest_port)
         self.leader_host_port = (leader_host, leader_port)
 
     def __countdown_callback(self):
@@ -118,7 +118,7 @@ class RaftNode:
         If no heartbeat coming until timer expires,
         current node becomes a candidate and sends REQUEST_TO_VOTE to other nodes.
         """
-        self.logger.info("Countdown expired, sending REQUEST_TO_VOTE")
+        self.logger.info(f"Countdown expired, sending {MessageTypes.REQUEST_TO_VOTE.name}")
         self.vote_self()
 
         msg = Message(
@@ -150,15 +150,18 @@ class RaftNode:
                     return
                 msg = Message.from_bytes(data)
                 self.logger.debug(f"Be voted by {peer_host}:{peer_port}")
-                self.be_voted()
+                self.vote_count += 1
+                if self.state == NodeState.CANDIDATE:
+                    self.check_become_leader()
         except ConnectionRefusedError:
             pass
 
     def send_heartbeats(self) -> None:
         """Send heartbeat to all peers"""
         while not self.stopped and self.state == NodeState.LEADER:
-            # put host and port in HEARTBEAT message
-            msg = Message(MessageTypes.HEARTBEAT, self.host, str(self.port))
+            msg = Message(
+                MessageTypes.HEARTBEAT, dest_host=self.host, dest_port=str(self.port)
+            )
             self.active_peer_cnt = 0
             for peer_host, peer_port in self.peers:
                 Thread(
@@ -199,7 +202,9 @@ class RaftNode:
 
     def forward_to_leader(self, client_socket: socket.socket, msg: Message):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            self.logger.info(f"Forward to leader: {self.leader_host_port}")
+            self.logger.info(
+                f"Forward {msg.type.name} to leader: {self.leader_host_port}"
+            )
             s.connect(self.leader_host_port)
             s.sendall(msg.to_bytes())
             while not self.stopped:

@@ -5,7 +5,7 @@ from typing import List
 
 from broker import Broker
 from publisher import Publisher
-from utils import DEFAULT_HOST, DEFAULT_PORT
+from utils import BROKER_HOST, BROKER_PORT
 from subscriber import Subscriber
 
 logging.basicConfig(
@@ -17,7 +17,7 @@ logging.basicConfig(
 
 def main():
     # broker
-    host_ips = [(DEFAULT_HOST, DEFAULT_PORT), (DEFAULT_HOST, DEFAULT_PORT + 1)]
+    host_ips = [(BROKER_HOST, BROKER_PORT), (BROKER_HOST, BROKER_PORT + 1)]
     brokers: List[Broker] = []
 
     broker1 = Broker(host=host_ips[0][0], port=host_ips[0][1], peers=[host_ips[1]], election_timeout=3)
@@ -34,8 +34,8 @@ def main():
 
     # subscriber
     subscriber = Subscriber(*host_ips[0])
-    subscriber.subscribe("topic1")
     threading.Thread(target=subscriber.receive).start()
+    subscriber.subscribe("topic1")
     time.sleep(1)
 
     # publisher
