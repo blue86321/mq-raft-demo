@@ -1,4 +1,3 @@
-import datetime
 import logging
 import socket
 from threading import Thread
@@ -19,13 +18,32 @@ class Broker(RaftNode):
         election_timeout: float = 0,
     ):
         RaftNode.__init__(self, host, port, peers, election_timeout)
-        self.logger = logging.getLogger(f"{self.__class__.__name__} {self.port}")
         self.backlog = backlog
 
         # Store subscribed clients for each topic
         #  e.g. { 'topic': set((host1, port1), (host2, port2), ...) }
         self.topic_subscribers: Dict[str, Set[Tuple[str, int]]] = {}
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    def handle_subscribe(self, msg: Message):
+        if msg.topic not in self.topic_subscribers:
+            # Create a new set to store subscribed clients for this topic
+            self.topic_subscribers[msg.topic] = set()
+        host_port = (msg.dest_host, int(msg.dest_port))
+        self.topic_subscribers[msg.topic].add(host_port)
+
+    def handle_unsubscribe(self, msg: Message):
+        if msg.topic in self.topic_subscribers:
+            host_port = (msg.dest_host, int(msg.dest_port))
+            self.topic_subscribers[msg.topic].discard(host_port)
+
+    def handle_append_entries(self, append_entries: Message):
+        """Handle an append_entries message from the leader"""
+        self.logger.info("Handle append_entries from the leader")
+        if append_entries.type == MessageTypes.SUBSCRIBE:
+            self.handle_subscribe(append_entries)
+        elif append_entries.type == MessageTypes.UNSUBSCRIBE:
+            self.handle_unsubscribe(append_entries)
 
     def handle_client(self, client_socket: socket.socket, address) -> None:
         """Handle client connections, include UN/SUBSCRIBE, PUBLISH,
@@ -35,49 +53,39 @@ class Broker(RaftNode):
             client_socket (socket.socket): client socket
             address (_type_): client socket address
         """
-        # while True:
         try:
             data = client_socket.recv(1024)
         except OSError:
-            pass
+            return
         if not data:
-            pass
+            return
         msg = Message.from_bytes(data)
 
         if msg.type == MessageTypes.PUBLISH:
             # Handle PUBLISH message
-            self.logger.info(f"New publish `{msg.topic}`: {msg.content}")
+            self.logger.info(f"New publish `{msg.topic}`: `{msg.content}`")
             if msg.topic in self.topic_subscribers:
-                # TODO: leader should update `topic_subscribers` to all followers
-                # Forward message to all clients subscribed to this topic
+                # Forward message to all subscribers in the same topic
                 for host, port in self.topic_subscribers[msg.topic]:
-                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                        s.connect((host, port))
-                        s.sendall(msg.to_bytes())
-        elif msg.type == MessageTypes.SUBSCRIBE:
-            # Handle SUBSCRIBE message
+                    try:
+                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                            s.connect((host, port))
+                            s.sendall(msg.to_bytes())
+                    except ConnectionRefusedError:
+                        pass
+        elif msg.type == MessageTypes.SUBSCRIBE or msg.type == MessageTypes.UNSUBSCRIBE:
+            # Handle UN/SUBSCRIBE message
             if not self.is_leader:
+                # Forward to leader if current node is not a leader
                 self.forward_to_leader(client_socket, msg)
             else:
                 self.logger.info(
-                    f"New subscription to `{msg.topic}` from {msg.dest_host}:{msg.dest_port}"
+                    f"New {msg.type.name} to `{msg.topic}` from {msg.dest_host}:{msg.dest_port}"
                 )
-                if msg.topic not in self.topic_subscribers:
-                    # Create a new set to store subscribed clients for this topic
-                    self.topic_subscribers[msg.topic] = set()
-                host_port = (msg.dest_host, int(msg.dest_port))
-                self.topic_subscribers[msg.topic].add(host_port)
-        elif msg.type == MessageTypes.UNSUBSCRIBE:
-            # Handle UNSUBSCRIBE message
-            if not self.is_leader:
-                self.forward_to_leader(client_socket, msg)
-            else:
-                self.logger.info(
-                    f"New unsubscribe to `{msg.topic}` from {msg.dest_host}:{msg.dest_port}"
-                )
-                if msg.topic in self.topic_subscribers:
-                    host_port = (msg.dest_host, int(msg.dest_port))
-                    self.topic_subscribers[msg.topic].discard(host_port)
+                if msg.type == MessageTypes.SUBSCRIBE:
+                    self.setup_append_entries(msg, self.handle_subscribe)
+                elif msg.type == MessageTypes.UNSUBSCRIBE:
+                    self.setup_append_entries(msg, self.handle_unsubscribe)
         elif msg.type == MessageTypes.HEARTBEAT:
             self.on_receive_heartbeat(client_socket, msg)
         elif msg.type == MessageTypes.REQUEST_TO_VOTE:
@@ -89,8 +97,8 @@ class Broker(RaftNode):
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen(self.backlog)
 
-        # Start heartbeat thread
-        Thread(target=self.send_heartbeats).start()
+        # RaftNode run (leader election)
+        super().run()
 
         # Start accepting client connections
         Thread(target=self.accept_client_connections).start()
@@ -106,8 +114,8 @@ class Broker(RaftNode):
                     args=(client_socket, address),
                     daemon=True,
                 ).start()
-            # when `self.stop()` is invoked, it closes server_socket and yields this exception
             except ConnectionAbortedError:
+                # when `self.stop()` is invoked, it closes server_socket and yields this exception
                 break
 
     def stop(self):

@@ -19,7 +19,9 @@ class Publisher:
         """
         # Create a message object with type PUBLISH, the specified topic, and message
         msg = Message(MessageTypes.PUBLISH, topic, content)
-        self.logger.info(f"Publish to topic `{msg.topic}`: {msg.content}")
+        self.logger.info(
+            f"Publish to topic `{msg.topic}`: `{msg.content}` at {self.broker_host}:{self.broker_port}"
+        )
 
         # Send the message to the broker via a socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

@@ -31,20 +31,31 @@ class Subscriber:
         )
 
     def subscribe(self, topic: str) -> None:
-        """Subscribe to a topic at the broker
+        self.handle_operation(topic, MessageTypes.SUBSCRIBE)
+
+    def unsubscribe(self, topic: str) -> None:
+        self.handle_operation(topic, MessageTypes.UNSUBSCRIBE)
+
+    def handle_operation(self, topic: str, type: MessageTypes) -> None:
+        """Handle the operation to send message to the broker
 
         Args:
-            topic (str): message topic to subscribe to
+            topic (str): message topic
+            type (MessageTypes): message type, like UN/SUBSCRIBE
         """
-        # Create a message object with type SUBSCRIBE and the specified topic
+        self.logger.info(
+            f"{type.name} message on topic `{topic}` at {self.broker_host}:{self.broker_port}"
+        )
+
+        # Create a message
         msg = Message(
-            MessageTypes.SUBSCRIBE,
+            type,
             topic,
             "",
             self.subscriber_host,
-            self.subscriber_port,
+            str(self.subscriber_port),
         )
-        self.logger.info(f"Subscribe message on topic `{msg.topic}`")
+
         # Send the message to the broker via a socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((self.broker_host, self.broker_port))
@@ -67,11 +78,14 @@ class Subscriber:
                 # Convert the received bytes to a message object
                 msg = Message.from_bytes(data)
                 self.logger.info(
-                    f"Received message: {msg.content} on topic `{msg.topic}`"
+                    f"Received message: `{msg.content}` on topic `{msg.topic}`"
                 )
             # when self.stop() is invoked, it closes socket and yields this exception
             except OSError:
                 break
+
+    def run(self):
+        threading.Thread(target=self.receive).start()
 
     def stop(self) -> None:
         """Stop receiving messages from the broker"""

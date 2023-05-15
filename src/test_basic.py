@@ -21,18 +21,19 @@ def main():
         broker.run()
 
     threading.Thread(target=run_broker, args=(broker,)).start()
-    time.sleep(5)
+    time.sleep(1)
 
+    topic = "topic1"
     # subscriber
     subscriber = Subscriber()
-    threading.Thread(target=subscriber.receive).start()
-    subscriber.subscribe("topic1")
+    subscriber.run()
+    subscriber.subscribe(topic)
     time.sleep(1)
 
     # publisher
     publisher = Publisher()
-    publisher.publish("topic1", "Hello, world!")
-    time.sleep(1)
+    publisher.publish(topic, "Hello, world!")
+    time.sleep(0.5)
 
     # stop
     subscriber.stop()
