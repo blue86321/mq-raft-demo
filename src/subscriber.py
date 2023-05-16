@@ -77,9 +77,12 @@ class Subscriber:
                     continue
                 # Convert the received bytes to a message object
                 msg = Message.from_bytes(data)
-                self.logger.info(
-                    f"Received message: `{msg.content}` on topic `{msg.topic}`"
-                )
+                if msg.type == MessageTypes.ACK:
+                    self.logger.info(f"Received {msg.type.name}")
+                else:
+                    self.logger.info(
+                        f"Received message: `{msg.content}` on topic `{msg.topic}`"
+                    )
             # when self.stop() is invoked, it closes socket and yields this exception
             except OSError:
                 break

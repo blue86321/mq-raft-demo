@@ -38,12 +38,22 @@ class Broker(RaftNode):
             self.topic_subscribers[msg.topic].discard(host_port)
 
     def handle_append_entries(self, append_entries: Message):
-        """Handle an append_entries message from the leader"""
-        self.logger.info("Handle append_entries from the leader")
+        """Handle append_entries message"""
+        self.logger.info("Handle append_entries")
         if append_entries.type == MessageTypes.SUBSCRIBE:
             self.handle_subscribe(append_entries)
         elif append_entries.type == MessageTypes.UNSUBSCRIBE:
             self.handle_unsubscribe(append_entries)
+
+        # leader: send ACK to the subscriber
+        if self.is_leader:
+            host_port = (append_entries.dest_host, int(append_entries.dest_port))
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect(host_port)
+                    s.sendall(Message(MessageTypes.ACK).to_bytes())
+            except ConnectionRefusedError:
+                pass
 
     def handle_client(self, client_socket: socket.socket, address) -> None:
         """Handle client connections, include UN/SUBSCRIBE, PUBLISH,
@@ -82,10 +92,7 @@ class Broker(RaftNode):
                 self.logger.info(
                     f"New {msg.type.name} to `{msg.topic}` from {msg.dest_host}:{msg.dest_port}"
                 )
-                if msg.type == MessageTypes.SUBSCRIBE:
-                    self.setup_append_entries(msg, self.handle_subscribe)
-                elif msg.type == MessageTypes.UNSUBSCRIBE:
-                    self.setup_append_entries(msg, self.handle_unsubscribe)
+                self.setup_append_entries(msg, self.handle_append_entries)
         elif msg.type == MessageTypes.HEARTBEAT:
             self.on_receive_heartbeat(client_socket, msg)
         elif msg.type == MessageTypes.REQUEST_TO_VOTE:
