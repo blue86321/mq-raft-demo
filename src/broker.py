@@ -13,17 +13,30 @@ class Broker(RaftNode):
         host: str = BROKER_HOST,
         port: int = BROKER_PORT,
         backlog: int = 5,
+        # If this node is to join an existing cluster, provide dest host and port
+        join_dest: Tuple[str, int] = None,
         # list of peer host and port
         peers: List[Tuple[str, int]] = None,
         election_timeout: float = 0,
     ):
         RaftNode.__init__(self, host, port, peers, election_timeout)
         self.backlog = backlog
-
+        self.join_dest = join_dest
         # Store subscribed clients for each topic
         #  e.g. { 'topic': set((host1, port1), (host2, port2), ...) }
         self.topic_subscribers: Dict[str, Set[Tuple[str, int]]] = {}
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    @property
+    def sync_data(self):
+        return self.topic_subscribers
+
+    def handle_sync(self, msg: Message, client_socket: socket.socket):
+        # Sync all `topic_subscribers` received from the leader
+        if msg.sync_data:
+            self.topic_subscribers = {topic: set([tuple(host) for host in host_list]) for topic, host_list in msg.sync_data.items()}
+        # start node election
+        super().after_handle_sync(msg, client_socket)
 
     def handle_subscribe(self, msg: Message):
         if msg.topic not in self.topic_subscribers:
@@ -97,6 +110,13 @@ class Broker(RaftNode):
             self.on_receive_heartbeat(client_socket, msg)
         elif msg.type == MessageTypes.REQUEST_TO_VOTE:
             self.handle_request_to_vote(client_socket, msg)
+        elif msg.type == MessageTypes.JOIN_CLUSTER:
+            if self.is_leader:
+                self.handle_join_cluster(msg)
+            else:
+                self.forward_to_leader(client_socket, msg)
+        elif msg.type == MessageTypes.SYNC_DATA:
+            self.handle_sync(msg, client_socket)
 
     def run(self) -> None:
         """Start the broker and listen for client connections"""
@@ -104,8 +124,12 @@ class Broker(RaftNode):
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen(self.backlog)
 
-        # RaftNode run (leader election)
-        super().run()
+        if self.join_dest:
+            # join an existing cluster
+            super().request_join_cluster((self.host, self.port), self.join_dest)
+        else:
+            # RaftNode run (leader election)
+            super().run()
 
         # Start accepting client connections
         Thread(target=self.accept_client_connections).start()

@@ -1,7 +1,6 @@
 from enum import Enum
 import json
-from typing import Union
-from types import SimpleNamespace
+from typing import Dict, List, Set, Tuple, Union
 
 
 BROKER_HOST = "localhost"
@@ -25,6 +24,8 @@ class MessageTypes(str, Enum):
     ACK = "ack"
     REQUEST_TO_VOTE = "request_to_vote"
     VOTE = "vote"
+    JOIN_CLUSTER = "join_cluster"
+    SYNC_DATA = "sync_data"
 
 
 class Message:
@@ -37,6 +38,10 @@ class Message:
         dest_port: str = "",
         election_term: str = "",
         nested_msg: Union["Message", None] = None,
+        sync_data: Dict[
+            str, Union[Set[Tuple[str, int]], List[List[Union[str, int]]]]
+        ] = None,
+        all_nodes: Union[Set[Tuple[str, int]], List[List[Union[str, int]]]] = None,
     ):
         self.type = type if isinstance(type, MessageTypes) else MessageTypes(type)
         self.topic = topic
@@ -45,13 +50,17 @@ class Message:
         self.dest_port = dest_port
         self.election_term = election_term
         self.nested_msg = nested_msg
+        self.sync_data = (
+            {k: list(v) for k, v in sync_data.items()} if sync_data else None
+        )
+        self.all_nodes = list(all_nodes) if all_nodes else None
 
     def to_json(self):
         return json.dumps(self, default=lambda o: o.__dict__)
 
     @classmethod
     def from_json(cls, data):
-        return json.loads(data, object_hook=lambda d: cls(**d))
+        return json.loads(data, object_hook=cls.from_dict)
 
     def to_bytes(self) -> bytes:
         """Convert a message to bytes to send via a socket"""
@@ -61,4 +70,19 @@ class Message:
     def from_bytes(cls, data: bytes) -> "Message":
         """Convert bytes received from a socket to a message object"""
         decoded_data = data.decode()
-        return cls.from_json(decoded_data)
+        instance: Message = cls.from_json(decoded_data)
+        instance.type = MessageTypes(instance.type)
+        return instance
+
+    @classmethod
+    def from_dict(cls, dict: Dict) -> "Message":
+        """Deserialize from a nested object"""
+        
+        if dict.get("type"):
+            # if type (a str format of MessageType) exists, convert it
+            obj = cls(dict.pop("type"))
+            obj.__dict__.update(dict)
+            return obj
+        else:
+            # otherwise return dict directly (e.g. dict object like `sync_data`)
+            return dict

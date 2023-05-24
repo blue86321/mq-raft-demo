@@ -1,18 +1,18 @@
 import logging
-from queue import Queue
 import random
 import socket
-from threading import Thread, Timer
 import threading
 import time
+from queue import Queue
+from threading import Thread, Timer
 from typing import Callable, List, Tuple
 
 from utils import Message, MessageTypes, NodeState
 
 
 class RaftNode:
-    HEARTBEAT_INTERVAL = 0.15  # seconds
-    HEARTBEAT_TIMEOUT = 3  # seconds
+    HEARTBEAT_INTERVAL = 0.3    # seconds
+    HEARTBEAT_TIMEOUT = 3       # seconds
 
     def __init__(
         self,
@@ -36,9 +36,7 @@ class RaftNode:
         self.lock = threading.RLock()
         self.timer: Timer = None
         # cluster info
-        self.peers: List[Tuple[str, int]] = peers or []
-        self.peer_sockets: List[socket.socket] = []
-        self.majority = (len(self.peers) + 1) / 2
+        self.peers = set(peers) if peers else set()
         self.leader_host_port: Tuple(str, int) = None
 
         # append entries (log replication)
@@ -49,6 +47,46 @@ class RaftNode:
         self.buffer_queue: Queue[Message] = Queue()
 
         self.stopped = False
+
+    @property
+    def all_nodes(self):
+        """ALl nodes in the cluster"""
+        all_peers = set()
+        all_peers.add((self.host, self.port))
+        all_peers.update(self.peers)
+        return all_peers
+
+    @property
+    def majority(self):
+        return (len(self.peers) + 1) / 2
+
+    @property
+    def is_leader(self):
+        """Check if the current node is a leader"""
+        return self.state == NodeState.LEADER
+
+    @property
+    def election_timeout(self):
+        """Timeout for election in millisecond. If timeout reached, node becomes a candidate"""
+        return self.predefined_election_timeout * 1000 or (
+            self.HEARTBEAT_INTERVAL * 1000 + random.random() * 150
+        )
+
+    @property
+    def state(self):
+        """Node state (e.g. FOLLOWER, LEADER)"""
+        return self._state
+
+    @state.setter
+    def state(self, state: NodeState):
+        self._state = state
+        self.logger = logging.getLogger(
+            f"{self.__class__.__name__} {self.port} {self._state.name}"
+        )
+
+    @property
+    def sync_data(self):
+        raise NotImplementedError("Please implement sync_data")
 
     def set_stopped(self, value: bool):
         self.stopped = value
@@ -72,14 +110,16 @@ class RaftNode:
                 self.__check_convert_to_leader()
 
                 # send request to vote to peers
-                msg = Message(
+                request_to_vot_msg = Message(
                     MessageTypes.REQUEST_TO_VOTE,
                     election_term=str(self.election_term),
+                    dest_host=self.host,
+                    dest_port=self.port,
                 )
                 for peer_host, peer_port in self.peers:
                     Thread(
                         target=self.__send_request_to_vote,
-                        args=(peer_host, peer_port, msg),
+                        args=(peer_host, peer_port, request_to_vot_msg),
                     ).start()
                 # reset timeout in case more than one candidate in the cluster at the same election_term
                 self.__reset_election_timeout()
@@ -112,8 +152,9 @@ class RaftNode:
                 self.election_term = msg_term
                 self.voted = True
                 self.state = NodeState.FOLLOWER
-                msg = Message(MessageTypes.VOTE)
-                client_socket.sendall(msg.to_bytes())
+                vote = Message(MessageTypes.VOTE)
+                client_socket.sendall(vote.to_bytes())
+                self.logger.info(f"Vote to leader {msg.dest_host}:{msg.dest_port}, term: {self.election_term}")
                 # reset timer
                 self.__reset_election_timeout()
 
@@ -157,10 +198,11 @@ class RaftNode:
             self.logger.info("Received append_entries, store in buffer")
             self.buffer_queue.put(msg.nested_msg)
 
-        # update leader info
+        # update cluster info
         leader_host = msg.dest_host
         leader_port = int(msg.dest_port)
         self.leader_host_port = (leader_host, leader_port)
+        self.peers = set([tuple(p) for p in msg.all_nodes if p != (self.host, self.port)])
 
     def handle_append_entries(self, append_entries: Message):
         """Override to handle incoming append_entries from the leader"""
@@ -190,9 +232,11 @@ class RaftNode:
                 self.vote_count += 1
                 if self.state == NodeState.CANDIDATE:
                     self.__check_convert_to_leader()
-        # todo: no vote
-        except ConnectionRefusedError | socket.timeout:
-            pass
+        except ConnectionRefusedError:
+            # view a node as leaving if it refuses connection while voting
+            with self.lock:
+                self.logger.info(f"Node leave the cluster: {peer_host}:{peer_port}")
+                self.peers.remove((peer_host, peer_port))
 
     def __send_heartbeats(self) -> None:
         """Send heartbeat to all peers"""
@@ -210,6 +254,7 @@ class RaftNode:
                     dest_port=str(self.port),
                     # send with heartbeat
                     nested_msg=nested_msg,
+                    all_nodes=self.all_nodes,
                 )
                 for peer_host, peer_port in self.peers:
                     Thread(
@@ -228,28 +273,28 @@ class RaftNode:
             peer_port (int): peer port
             msg (Message): message to send (HEARTBEAT)
         """
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
                 s.settimeout(self.HEARTBEAT_TIMEOUT)
                 s.connect((peer_host, peer_port))
                 self.logger.debug(f"Send heartbeat to peer {peer_host}:{peer_port}")
-                # wait for ACK
                 s.sendall(msg.to_bytes())
+                # wait for ACK
                 data = s.recv(1024)
                 if not data:
                     return
-                ack_msg = Message.from_bytes(data)
+                ack = Message.from_bytes(data)
                 self.logger.debug(
-                    f"Received {ack_msg.type.name} from {peer_host}:{peer_port}"
+                    f"Received {ack.type.name} from {peer_host}:{peer_port}"
                 )
                 # append_entries
                 if msg.nested_msg:
                     self.__check_append_entries()
-        # todo: peer fails
-        except ConnectionRefusedError:
-            pass
-        except socket.timeout:
-            pass
+            except (ConnectionRefusedError, socket.timeout):
+                # mark the node leave if get refused or timeout
+                with self.lock:
+                    self.logger.info(f"Node leave the cluster: {peer_host}:{peer_port}")
+                    self.peers.remove((peer_host, peer_port))
 
     def __check_append_entries(self, self_check=False):
         """If majority of peers ack, append entries on current node (leader)
@@ -277,22 +322,6 @@ class RaftNode:
             )
             s.connect(self.leader_host_port)
             s.sendall(msg.to_bytes())
-            while not self.stopped:
-                data = s.recv(1024)
-                if not data:
-                    return
-                client_socket.sendall(data)
-
-    @property
-    def is_leader(self):
-        return self.state == NodeState.LEADER
-
-    @property
-    def election_timeout(self):
-        """Timeout for election in millisecond. If timeout reached, node becomes a candidate"""
-        return self.predefined_election_timeout * 1000 or (
-            self.HEARTBEAT_INTERVAL * 1000 + random.random() * 150
-        )
 
     def setup_append_entries(self, append_entries: Message, callback: Callable):
         """Setup append_entries. This message will send to peers in the next heartbeat"""
@@ -303,16 +332,67 @@ class RaftNode:
             self.local_entry_queue.put((append_entries, callback))
         self.__check_append_entries(self_check=True)
 
-    @property
-    def state(self):
-        return self._state
+    def request_join_cluster(self, source: Tuple[str, int], dest: Tuple[str, int]):
+        """Send a request to join a cluster to the destination node"""
+        Thread(
+            target=self.__request_join_cluster,
+            args=(
+                source,
+                dest,
+            ),
+        ).start()
 
-    @state.setter
-    def state(self, state):
-        self._state = state
-        self.logger = logging.getLogger(
-            f"{self.__class__.__name__} {self.port} {self._state.name}"
+    def __request_join_cluster(self, source: Tuple[str, int], dest: Tuple[str, int]):
+        """Send a request to join a cluster to the destination node"""
+        self.peers = set()
+        cluster_host, cluster_port = dest
+        join_msg = Message(
+            MessageTypes.JOIN_CLUSTER, dest_host=source[0], dest_port=source[1]
         )
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((cluster_host, cluster_port))
+            self.logger.info(f"Request JOIN_CLUSTER {cluster_host}:{cluster_port}")
+            s.sendall(join_msg.to_bytes())
+
+    def handle_join_cluster(self, msg: Message):
+        """New node wants to join the cluster"""
+        host = msg.dest_host
+        port = msg.dest_port
+        sync_msg = Message(
+            MessageTypes.SYNC_DATA,
+            dest_host=self.host,
+            dest_port=self.port,
+            all_nodes=self.all_nodes,
+            election_term=self.election_term,
+            sync_data=self.sync_data,
+        )
+
+        # sync data
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((host, port))
+            self.logger.info(f"Sync data with peer {host}:{port}")
+            s.sendall(sync_msg.to_bytes())
+            # wait for ACK
+            data = s.recv(1024)
+            if not data:
+                return
+            ack = Message.from_bytes(data)
+            # join the cluster
+            self.peers.add((host, port))
+            self.logger.info(f"New node joins the cluster {host}:{port}")
+
+    def after_handle_sync(self, msg: Message, client_socket: socket.socket):
+        """After setting up sync_data, call this function"""
+        # send ACK
+        client_socket.sendall(Message(MessageTypes.ACK).to_bytes())
+        # with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        #     s.connect((msg.dest_host, msg.dest_port))
+        #     s.sendall(Message(MessageTypes.ACK).to_bytes())
+        
+        # run node (start election timeout)
+        self.election_term = msg.election_term
+        self.peers = set([tuple(p) for p in msg.all_nodes])
+        RaftNode.run(self)
 
     def run(self):
         self.__reset_election_timeout()
