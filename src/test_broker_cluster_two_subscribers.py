@@ -1,5 +1,4 @@
 import logging
-import threading
 import time
 from typing import List
 
@@ -40,26 +39,30 @@ def main():
     time.sleep(2.5)
 
     topic = "topic1"
-
     # subscriber
     subscribers = [
         Subscriber(*host_ips[0]),
-        Subscriber(*host_ips[0], subscriber_port=SUBSCRIBER_PORT + 5),
+        Subscriber(*host_ips[1], subscriber_port=SUBSCRIBER_PORT + 5),
     ]
-    for sub in subscribers:
+    for idx, sub in enumerate(subscribers):
         sub.run()
+        print(f"==================== Subscribe to Node {idx + 1} ====================")
         sub.subscribe(topic)
     time.sleep(1)
 
+    print("==================== Publish to Node 2 ====================")
     # publisher
     publisher = Publisher(*host_ips[1])
     publisher.publish(topic, "Hello, world!")
     time.sleep(1)
 
+    print("==================== Unsubscribe and Publish ====================")
     # unsubscribe
     subscribers[0].unsubscribe(topic)
+    print("==================== Publish (Temporary inconsistent) ====================")
     publisher.publish(topic, "Hello, too fast")
     time.sleep(0.5)
+    print("==================== Publish Later ====================")
     publisher.publish(topic, "Hello, later")
     time.sleep(1)
 

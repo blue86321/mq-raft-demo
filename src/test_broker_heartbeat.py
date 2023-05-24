@@ -12,9 +12,13 @@ logging.basicConfig(
 )
 
 
-def main(same_election_timeout=False):
+def run(
+    same_election_timeout=False,
+    broker_host: str = BROKER_HOST,
+    broker_port: int = BROKER_PORT,
+):
     # broker
-    host_ips = [(BROKER_HOST, BROKER_PORT), (BROKER_HOST, BROKER_PORT + 1)]
+    host_ips = [(broker_host, broker_port), (broker_host, broker_port + 1)]
     brokers: List[Broker] = []
 
     election_timeout = 0
@@ -44,6 +48,12 @@ def main(same_election_timeout=False):
         broker.stop()
 
 
+def main():
+    print("\n\n==================== Same Election Timeout ====================")
+    run(same_election_timeout=True)
+    print("\n\n==================== Different Election Timeout ====================")
+    run(broker_port=BROKER_PORT + 100)
+
+
 if __name__ == "__main__":
-    # main()
-    main(same_election_timeout=True)
+    main()
