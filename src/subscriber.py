@@ -16,19 +16,17 @@ class Subscriber:
         self,
         broker_host: str = BROKER_HOST,
         broker_port: int = BROKER_PORT,
-        subscriber_host: str = SUBSCRIBER_HOST,
-        subscriber_port: int = SUBSCRIBER_PORT,
+        host: str = SUBSCRIBER_HOST,
+        port: int = SUBSCRIBER_PORT,
     ):
         self.broker_host = broker_host
         self.broker_port = broker_port
-        self.subscriber_host = subscriber_host
-        self.subscriber_port = subscriber_port
+        self.host = host
+        self.port = port
 
         self.recv_socket = None
 
-        self.logger = logging.getLogger(
-            f"{self.__class__.__name__} {self.subscriber_port}"
-        )
+        self.logger = logging.getLogger(f"{self.__class__.__name__} {self.port}")
 
     def subscribe(self, topic: str) -> None:
         self.handle_operation(topic, MessageTypes.SUBSCRIBE)
@@ -48,13 +46,7 @@ class Subscriber:
         )
 
         # Create a message
-        msg = Message(
-            type,
-            topic,
-            "",
-            self.subscriber_host,
-            self.subscriber_port,
-        )
+        msg = Message(type, topic, dest_host=self.host, dest_port=self.port)
 
         # Send the message to the broker via a socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -63,11 +55,9 @@ class Subscriber:
 
     def receive(self) -> None:
         """Receive message from the broker"""
-        self.logger.info(
-            f"Subscriber is running on {self.subscriber_host}:{self.subscriber_port}"
-        )
+        self.logger.info(f"Subscriber is running on {self.host}:{self.port}")
         self.recv_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.recv_socket.bind((self.subscriber_host, self.subscriber_port))
+        self.recv_socket.bind((self.host, self.port))
         self.recv_socket.listen(5)
         while True:
             try:
@@ -102,6 +92,6 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    subscriber = Subscriber(subscriber_port=SUBSCRIBER_PORT)
+    subscriber = Subscriber(port=SUBSCRIBER_PORT)
     subscriber.subscribe("topic1")
     threading.Thread(target=subscriber.receive).start()
