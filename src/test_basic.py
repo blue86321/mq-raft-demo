@@ -1,5 +1,4 @@
 import logging
-import threading
 import time
 
 from broker import Broker
@@ -15,11 +14,14 @@ logging.basicConfig(
 
 def main():
     # broker
+    print("\n\n==================== Broker ====================")
     broker = Broker()
     broker.run()
     time.sleep(1)
 
     topic = "topic1"
+    
+    print("\n\n==================== Subscribe ====================")
     # subscriber
     subscriber = Subscriber()
     subscriber.run()
@@ -27,6 +29,7 @@ def main():
     time.sleep(1)
 
     # publisher
+    print("\n\n==================== Publish ====================")
     publisher = Publisher()
     publisher.publish(topic, "Hello, world!")
     time.sleep(0.5)

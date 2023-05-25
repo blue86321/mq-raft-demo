@@ -34,31 +34,32 @@ def main():
     )
     brokers.append(broker2)
 
+    print("\n\n==================== Broker ====================")
     for broker in brokers:
         broker.run()
     time.sleep(2.5)
 
     topic = "topic1"
-    print("==================== Subscribe to Node 1 ====================")
+    print("\n\n==================== Subscribe to Node 1 ====================")
     # subscriber
     subscriber = Subscriber(*host_ips[0])
     subscriber.run()
     subscriber.subscribe(topic)
     time.sleep(1)
 
-    print("==================== Publish to Node 2 ====================")
+    print("\n\n==================== Publish to Node 2 ====================")
     # publisher
     publisher = Publisher(*host_ips[1])
     publisher.publish(topic, "Hello, world!")
     time.sleep(1)
 
-    print("==================== Unsubscribe and Publish ====================")
+    print("\n\n==================== Unsubscribe and Publish ====================")
     # unsubscribe
     subscriber.unsubscribe(topic)
-    print("==================== Publish (Temporary inconsistent) ====================")
+    print("\n\n==================== Publish (Temporary inconsistent) ====================")
     publisher.publish(topic, "Hello, too fast")
     time.sleep(0.5)
-    print("==================== Publish Later ====================")
+    print("\n\n==================== Publish Later ====================")
     publisher.publish(topic, "Hello, later")
     time.sleep(1)
 

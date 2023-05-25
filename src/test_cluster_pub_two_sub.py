@@ -4,7 +4,7 @@ from typing import List
 
 from broker import Broker
 from publisher import Publisher
-from utils import BROKER_HOST, BROKER_PORT
+from utils import BROKER_HOST, BROKER_PORT, SUBSCRIBER_PORT
 from subscriber import Subscriber
 
 logging.basicConfig(
@@ -34,41 +34,42 @@ def main():
     )
     brokers.append(broker2)
 
+    print("\n\n==================== Broker ====================")
     for broker in brokers:
         broker.run()
-    time.sleep(2)
+    time.sleep(2.5)
 
     topic = "topic1"
-    print("==================== Subscribe to Node 1 ====================")
     # subscriber
-    subscriber = Subscriber(*host_ips[0])
-    subscriber.run()
-    subscriber.subscribe(topic)
+    subscribers = [
+        Subscriber(*host_ips[0]),
+        Subscriber(*host_ips[1], port=SUBSCRIBER_PORT + 5),
+    ]
+    for idx, sub in enumerate(subscribers):
+        sub.run()
+        print(f"\n\n==================== Subscribe to Node {idx + 1} ====================")
+        sub.subscribe(topic)
     time.sleep(1)
 
-    print("==================== Node Join ====================")
-    new_node_ip = (host_ips[1][0], host_ips[1][1] + 5)
-    broker3 = Broker(
-        host=new_node_ip[0],
-        port=new_node_ip[1],
-        join_dest=host_ips[1],
-        election_timeout=1,
-    )
-    broker3.run()
-    time.sleep(2)
-
-    print("==================== Publish to New Node ====================")
+    print("\n\n==================== Publish to Node 2 ====================")
     # publisher
-    publisher = Publisher(*new_node_ip)
+    publisher = Publisher(*host_ips[1])
     publisher.publish(topic, "Hello, world!")
     time.sleep(1)
 
-    print("==================== Node Leave ====================")
-    broker3.stop()
-    time.sleep(2)
+    print("\n\n==================== Unsubscribe and Publish ====================")
+    # unsubscribe
+    subscribers[0].unsubscribe(topic)
+    print("\n\n==================== Publish (Temporary inconsistent) ====================")
+    publisher.publish(topic, "Hello, too fast")
+    time.sleep(0.5)
+    print("\n\n==================== Publish Later ====================")
+    publisher.publish(topic, "Hello, later")
+    time.sleep(1)
 
     # stop
-    subscriber.stop()
+    for sub in subscribers:
+        sub.stop()
     for broker in brokers:
         broker.stop()
 

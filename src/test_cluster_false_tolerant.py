@@ -14,42 +14,42 @@ logging.basicConfig(
 
 def main():
     # broker
-    host_ips = [(BROKER_HOST, BROKER_PORT), (BROKER_HOST, BROKER_PORT + 1)]
+    host_ips = [
+        (BROKER_HOST, BROKER_PORT),
+        (BROKER_HOST, BROKER_PORT + 1),
+        (BROKER_HOST, BROKER_PORT + 2),
+    ]
     brokers: List[Broker] = []
 
     broker1 = Broker(
         host=host_ips[0][0],
         port=host_ips[0][1],
-        peers=[host_ips[1]],
+        peers=[host_ips[1], host_ips[2]],
         election_timeout=0.5,
     )
     brokers.append(broker1)
     broker2 = Broker(
         host=host_ips[1][0],
         port=host_ips[1][1],
-        peers=[host_ips[0]],
+        peers=[host_ips[0], host_ips[2]],
         election_timeout=1,
     )
     brokers.append(broker2)
+    broker3 = Broker(
+        host=host_ips[2][0],
+        port=host_ips[2][1],
+        peers=[host_ips[0], host_ips[1]],
+        election_timeout=2,
+    )
+    brokers.append(broker3)
 
+    print("\n\n==================== Broker ====================")
     for broker in brokers:
         broker.run()
     time.sleep(2)
 
-    print("==================== Node Join ====================")
-
-    broker3 = Broker(
-        host=host_ips[1][0],
-        port=host_ips[1][1] + 2,
-        join_dest=host_ips[1],
-        election_timeout=1,
-    )
-    broker3.run()
-    time.sleep(2)
-
-    print("==================== Node Leave ====================")
-
-    broker3.stop()
+    print("\n\n==================== Leader Fail ====================")
+    broker1.stop()
     time.sleep(2)
 
     # stop
