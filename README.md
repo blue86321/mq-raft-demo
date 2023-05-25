@@ -338,3 +338,14 @@ pip install -r requirements.txt
 deactivate
 rm -rf venv
 ```
+
+## Limitations
+### Cluster Node Temporarily Unavailable
+- If a node is temporarily unavailable and get kicked from the cluster, there is no mechanism to gracefully re-join the cluster.
+
+### Message Cache Mechanism
+- The broker did not implement a message cache mechanism
+- If a subscriber is unavailable when a message is published, the subscriber will lose the message
+- To implement a message cache mechanism in a cluster is not easy, the problem is to notify all nodes about the cached messages.
+  - When a publish message failed to deliver, we need to forward the failed message to the leader and then notify all nodes to update.
+  - When a cached message is re-published, we need to delete the cached message and let the leader to notify all nodes to update.
