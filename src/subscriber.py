@@ -53,7 +53,7 @@ class Subscriber:
             topic,
             "",
             self.subscriber_host,
-            str(self.subscriber_port),
+            self.subscriber_port,
         )
 
         # Send the message to the broker via a socket

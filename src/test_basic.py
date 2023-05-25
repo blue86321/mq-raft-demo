@@ -16,11 +16,7 @@ logging.basicConfig(
 def main():
     # broker
     broker = Broker()
-
-    def run_broker(broker: Broker):
-        broker.run()
-
-    threading.Thread(target=run_broker, args=(broker,)).start()
+    broker.run()
     time.sleep(1)
 
     topic = "topic1"

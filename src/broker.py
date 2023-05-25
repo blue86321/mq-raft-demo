@@ -32,22 +32,34 @@ class Broker(RaftNode):
         return self.topic_subscribers
 
     def handle_sync(self, msg: Message, client_socket: socket.socket):
+        """For new node joins the cluster"""
         # Sync all `topic_subscribers` received from the leader
         if msg.sync_data:
             self.topic_subscribers = {topic: set([tuple(host) for host in host_list]) for topic, host_list in msg.sync_data.items()}
         # start node election
         super().after_handle_sync(msg, client_socket)
 
+    def handle_publish(self, msg: Message):
+        if msg.topic in self.topic_subscribers:
+            # Forward message to all subscribers in the same topic
+            for host, port in self.topic_subscribers[msg.topic]:
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.connect((host, port))
+                        s.sendall(msg.to_bytes())
+                except ConnectionRefusedError:
+                    pass
+
     def handle_subscribe(self, msg: Message):
         if msg.topic not in self.topic_subscribers:
             # Create a new set to store subscribed clients for this topic
             self.topic_subscribers[msg.topic] = set()
-        host_port = (msg.dest_host, int(msg.dest_port))
+        host_port = (msg.dest_host, msg.dest_port)
         self.topic_subscribers[msg.topic].add(host_port)
 
     def handle_unsubscribe(self, msg: Message):
         if msg.topic in self.topic_subscribers:
-            host_port = (msg.dest_host, int(msg.dest_port))
+            host_port = (msg.dest_host, msg.dest_port)
             self.topic_subscribers[msg.topic].discard(host_port)
 
     def handle_append_entries(self, append_entries: Message):
@@ -60,7 +72,7 @@ class Broker(RaftNode):
 
         # leader: send ACK to the subscriber
         if self.is_leader:
-            host_port = (append_entries.dest_host, int(append_entries.dest_port))
+            host_port = (append_entries.dest_host, append_entries.dest_port)
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.connect(host_port)
@@ -69,8 +81,9 @@ class Broker(RaftNode):
                 pass
 
     def handle_client(self, client_socket: socket.socket, address) -> None:
-        """Handle client connections, include UN/SUBSCRIBE, PUBLISH,
-        and cluster message like HEARTBEAT, REQUEST_TO_VOTE
+        """Handle client connections, including
+            1. broker operation like UN/SUBSCRIBE, PUBLISH,
+            2. cluster message like HEARTBEAT, REQUEST_TO_VOTE
 
         Args:
             client_socket (socket.socket): client socket
@@ -87,15 +100,7 @@ class Broker(RaftNode):
         if msg.type == MessageTypes.PUBLISH:
             # Handle PUBLISH message
             self.logger.info(f"New publish `{msg.topic}`: `{msg.content}`")
-            if msg.topic in self.topic_subscribers:
-                # Forward message to all subscribers in the same topic
-                for host, port in self.topic_subscribers[msg.topic]:
-                    try:
-                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                            s.connect((host, port))
-                            s.sendall(msg.to_bytes())
-                    except ConnectionRefusedError:
-                        pass
+            self.handle_publish(msg)
         elif msg.type == MessageTypes.SUBSCRIBE or msg.type == MessageTypes.UNSUBSCRIBE:
             # Handle UN/SUBSCRIBE message
             if not self.is_leader:

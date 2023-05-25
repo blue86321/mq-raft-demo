@@ -112,7 +112,7 @@ class RaftNode:
                 # send request to vote to peers
                 request_to_vot_msg = Message(
                     MessageTypes.REQUEST_TO_VOTE,
-                    election_term=str(self.election_term),
+                    election_term=self.election_term,
                     dest_host=self.host,
                     dest_port=self.port,
                 )
@@ -200,7 +200,7 @@ class RaftNode:
 
         # update cluster info
         leader_host = msg.dest_host
-        leader_port = int(msg.dest_port)
+        leader_port = msg.dest_port
         self.leader_host_port = (leader_host, leader_port)
         self.peers = set([tuple(p) for p in msg.all_nodes if p != (self.host, self.port)])
 
@@ -251,7 +251,7 @@ class RaftNode:
                 msg = Message(
                     MessageTypes.HEARTBEAT,
                     dest_host=self.host,
-                    dest_port=str(self.port),
+                    dest_port=self.port,
                     # send with heartbeat
                     nested_msg=nested_msg,
                     all_nodes=self.all_nodes,

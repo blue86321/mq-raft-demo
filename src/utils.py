@@ -34,9 +34,9 @@ class Message:
         type: Union[MessageTypes, str],
         topic: str = "",
         content: str = "",
-        dest_host: str = "",
-        dest_port: str = "",
-        election_term: str = "",
+        dest_host: str = None,
+        dest_port: int = 0,
+        election_term: int = 0,
         nested_msg: Union["Message", None] = None,
         sync_data: Dict[
             str, Union[Set[Tuple[str, int]], List[List[Union[str, int]]]]
