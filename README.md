@@ -59,12 +59,12 @@ pip install -r requirements.txt
 
 
   ==================== Subscribe ====================
-  2023-05-24 17:39:54 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
   2023-05-24 17:39:54 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
+  2023-05-24 17:39:54 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
   2023-05-24 17:39:54 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
   2023-05-24 17:39:54 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-  2023-05-24 17:39:54 [Broker 8000 LEADER] INFO: Handle append_entries
-  2023-05-24 17:39:54 [Subscriber 9000] INFO: Received ACK
+  2023-05-24 17:39:54 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
+  2023-05-24 17:39:54 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
 
 
   ==================== Publish ====================
@@ -89,14 +89,14 @@ pip install -r requirements.txt
 
 
   ==================== Subscribe to Node 1 ====================
-  2023-05-24 18:06:41 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
   2023-05-24 18:06:41 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
+  2023-05-24 18:06:41 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
   2023-05-24 18:06:41 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
   2023-05-24 18:06:41 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
   2023-05-24 18:06:41 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-  2023-05-24 18:06:41 [Broker 8000 LEADER] INFO: Handle append_entries
-  2023-05-24 18:06:41 [Subscriber 9000] INFO: Received ACK
-  2023-05-24 18:06:42 [Broker 8001 FOLLOWER] INFO: Handle append_entries
+  2023-05-24 18:06:41 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
+  2023-05-24 18:06:41 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
+  2023-05-24 18:06:42 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
 
 
   ==================== Publish to Node 2 ====================
@@ -116,15 +116,14 @@ pip install -r requirements.txt
   2023-05-24 18:06:43 [Subscriber 9000] INFO: Received message: `Hello, too fast` on topic `topic1`
   2023-05-24 18:06:43 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
   2023-05-24 18:06:43 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-  2023-05-24 18:06:43 [Broker 8000 LEADER] INFO: Handle append_entries
-  2023-05-24 18:06:43 [Subscriber 9000] INFO: Received ACK
+  2023-05-24 18:06:43 [Broker 8000 LEADER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000
+  2023-05-24 18:06:43 [Subscriber 9000] INFO: Received ACK: unsubscribe on topic `topic1`
+  2023-05-24 18:06:43 [Broker 8001 FOLLOWER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000
 
 
   ==================== Publish Later ====================
   2023-05-24 18:06:44 [Publisher] INFO: Publish to topic `topic1`: `Hello, later` at localhost:8001
   2023-05-24 18:06:44 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, later`
-  2023-05-24 18:06:44 [Subscriber 9000] INFO: Received message: `Hello, later` on topic `topic1`
-  2023-05-24 18:06:44 [Broker 8001 FOLLOWER] INFO: Handle append_entries
   ```
 
 - Cluster with two subscribers
@@ -138,29 +137,29 @@ pip install -r requirements.txt
   2023-05-24 18:07:22 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
   2023-05-24 18:07:22 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
   2023-05-24 18:07:22 [Broker 8000 LEADER] INFO: New leader localhost:8000
-  2023-05-24 18:07:24 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
 
 
   ==================== Subscribe to Node 1 ====================
+  2023-05-24 18:07:24 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
   2023-05-24 18:07:24 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
   2023-05-24 18:07:24 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
-  2023-05-24 18:07:24 [Subscriber 9005] INFO: Subscriber is running on localhost:9005
 
 
   ==================== Subscribe to Node 2 ====================
+  2023-05-24 18:07:24 [Subscriber 9005] INFO: Subscriber is running on localhost:9005
   2023-05-24 18:07:24 [Subscriber 9005] INFO: SUBSCRIBE message on topic `topic1` at localhost:8001
   2023-05-24 18:07:24 [Broker 8001 FOLLOWER] INFO: Forward SUBSCRIBE to leader: ('localhost', 8000)
   2023-05-24 18:07:24 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9005
   2023-05-24 18:07:24 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
   2023-05-24 18:07:24 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-  2023-05-24 18:07:24 [Broker 8000 LEADER] INFO: Handle append_entries
-  2023-05-24 18:07:24 [Subscriber 9000] INFO: Received ACK
-  2023-05-24 18:07:24 [Broker 8001 FOLLOWER] INFO: Handle append_entries
-  2023-05-24 18:07:24 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
+  2023-05-24 18:07:24 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
+  2023-05-24 18:07:24 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
+  2023-05-24 18:07:24 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
   2023-05-24 18:07:24 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-  2023-05-24 18:07:24 [Broker 8000 LEADER] INFO: Handle append_entries
-  2023-05-24 18:07:24 [Subscriber 9005] INFO: Received ACK
-  2023-05-24 18:07:24 [Broker 8001 FOLLOWER] INFO: Handle append_entries
+  2023-05-24 18:07:24 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
+  2023-05-24 18:07:24 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9005
+  2023-05-24 18:07:24 [Subscriber 9005] INFO: Received ACK: subscribe on topic `topic1`
+  2023-05-24 18:07:24 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9005
 
 
   ==================== Publish to Node 2 ====================
@@ -172,26 +171,25 @@ pip install -r requirements.txt
 
   ==================== Unsubscribe and Publish ====================
   2023-05-24 18:07:26 [Subscriber 9000] INFO: UNSUBSCRIBE message on topic `topic1` at localhost:8000
-  2023-05-24 18:07:26 [Broker 8000 LEADER] INFO: New UNSUBSCRIBE to `topic1` from localhost:9000
 
 
   ==================== Publish (Temporary inconsistent) ====================
+  2023-05-24 18:07:26 [Broker 8000 LEADER] INFO: New UNSUBSCRIBE to `topic1` from localhost:9000
   2023-05-24 18:07:26 [Publisher] INFO: Publish to topic `topic1`: `Hello, too fast` at localhost:8001
   2023-05-24 18:07:26 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, too fast`
   2023-05-24 18:07:26 [Subscriber 9005] INFO: Received message: `Hello, too fast` on topic `topic1`
   2023-05-24 18:07:26 [Subscriber 9000] INFO: Received message: `Hello, too fast` on topic `topic1`
   2023-05-24 18:07:26 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
   2023-05-24 18:07:26 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-  2023-05-24 18:07:26 [Broker 8000 LEADER] INFO: Handle append_entries
-  2023-05-24 18:07:26 [Subscriber 9000] INFO: Received ACK
+  2023-05-24 18:07:26 [Broker 8000 LEADER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000
+  2023-05-24 18:07:26 [Subscriber 9000] INFO: Received ACK: unsubscribe on topic `topic1`
+  2023-05-24 18:07:26 [Broker 8001 FOLLOWER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000
 
 
   ==================== Publish Later ====================
   2023-05-24 18:07:26 [Publisher] INFO: Publish to topic `topic1`: `Hello, later` at localhost:8001
   2023-05-24 18:07:26 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, later`
   2023-05-24 18:07:26 [Subscriber 9005] INFO: Received message: `Hello, later` on topic `topic1`
-  2023-05-24 18:07:26 [Subscriber 9000] INFO: Received message: `Hello, later` on topic `topic1`
-  2023-05-24 18:07:26 [Broker 8001 FOLLOWER] INFO: Handle append_entries
   ```
 
 #### Broker Cluster Features
@@ -206,8 +204,8 @@ pip install -r requirements.txt
   2023-05-24 18:03:41 [Broker 8002 FOLLOWER] INFO: Running on localhost:8002
   2023-05-24 18:03:42 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
   2023-05-24 18:03:42 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
-  2023-05-24 18:03:42 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
   2023-05-24 18:03:42 [Broker 8000 LEADER] INFO: New leader localhost:8000
+  2023-05-24 18:03:42 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
 
 
   ==================== Leader Fail ====================
@@ -259,9 +257,9 @@ pip install -r requirements.txt
   2023-05-24 18:05:03 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
   2023-05-24 18:05:03 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
   2023-05-24 18:05:03 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-  2023-05-24 18:05:03 [Broker 8000 LEADER] INFO: Handle append_entries
-  2023-05-24 18:05:03 [Subscriber 9000] INFO: Received ACK
-  2023-05-24 18:05:04 [Broker 8001 FOLLOWER] INFO: Handle append_entries
+  2023-05-24 18:05:03 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
+  2023-05-24 18:05:03 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
+  2023-05-24 18:05:04 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
 
 
   ==================== Node Join ====================
@@ -299,10 +297,6 @@ pip install -r requirements.txt
   2023-05-24 18:08:15 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
   2023-05-24 18:08:15 [Broker 8000 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8001
   2023-05-24 18:08:15 [Broker 8001 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8000
-  2023-05-24 18:08:16 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 3
-  2023-05-24 18:08:16 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 3
-  2023-05-24 18:08:16 [Broker 8001 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8000
-  2023-05-24 18:08:16 [Broker 8000 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8001
 
 
   ==================== Different Election Timeout ====================
@@ -322,15 +316,6 @@ pip install -r requirements.txt
   2023-05-24 18:08:17 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8101
   2023-05-24 18:08:17 [Broker 8101 FOLLOWER] DEBUG: Received heartbeat from localhost:8100, send ACK back
   2023-05-24 18:08:17 [Broker 8100 LEADER] DEBUG: Received ACK from localhost:8101
-  2023-05-24 18:08:17 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8101
-  2023-05-24 18:08:17 [Broker 8101 FOLLOWER] DEBUG: Received heartbeat from localhost:8100, send ACK back
-  2023-05-24 18:08:17 [Broker 8100 LEADER] DEBUG: Received ACK from localhost:8101
-  2023-05-24 18:08:18 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8101
-  2023-05-24 18:08:18 [Broker 8101 FOLLOWER] DEBUG: Received heartbeat from localhost:8100, send ACK back
-  2023-05-24 18:08:18 [Broker 8100 LEADER] DEBUG: Received ACK from localhost:8101
-  2023-05-24 18:08:18 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8101
-  2023-05-24 18:08:18 [Broker 8101 FOLLOWER] DEBUG: Received heartbeat from localhost:8100, send ACK back
-  2023-05-24 18:08:18 [Broker 8100 LEADER] DEBUG: Received ACK from localhost:8101
   ```
 
 ### Exit Environment
