@@ -61,14 +61,16 @@ class Subscriber:
         self.recv_socket.listen(5)
         while True:
             try:
-                client_socket, address = self.recv_socket.accept()
+                client_socket, _ = self.recv_socket.accept()
                 data = client_socket.recv(1024)
                 if not data:
                     continue
                 # Convert the received bytes to a message object
                 msg = Message.from_bytes(data)
                 if msg.type == MessageTypes.ACK:
-                    self.logger.info(f"Received {msg.type.name}")
+                    # broker ACK for a Un/Subscribe request
+                    # `msg.content` is the operation (that is, `msg.type`` sent to broker)
+                    self.logger.info(f"Received {msg.type.name}: {msg.content} on topic `{msg.topic}`")
                 else:
                     self.logger.info(
                         f"Received message: `{msg.content}` on topic `{msg.topic}`"

@@ -23,7 +23,7 @@ def run(
 
     election_timeout = 0
     if same_election_timeout:
-        election_timeout = 0.5
+        election_timeout = 0.8
 
     broker1 = Broker(
         host=host_ips[0][0],
