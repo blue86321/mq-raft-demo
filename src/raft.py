@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import logging
 import random
 import socket
@@ -10,43 +11,26 @@ from typing import Callable, List, Tuple
 from utils import Message, MessageTypes, NodeState
 
 
-class RaftNode:
-    HEARTBEAT_INTERVAL = 0.3    # seconds
-    HEARTBEAT_TIMEOUT = 3       # seconds
-
+class BaseNode(ABC):
     def __init__(
         self,
         host: str,
         port: int,
         # list of peer host and port
         peers: List[Tuple[str, int]] = None,
-        election_timeout: float = 0,
     ):
         self.host = host
         self.port = port
 
-        self._state: NodeState = None
-        self.state = NodeState.FOLLOWER
-
-        self.election_term = 0
-        self.voted = False
-        self.vote_count = 0
-        # timeout
-        self.predefined_election_timeout = election_timeout
         self.lock = threading.RLock()
-        self.timer: Timer = None
+
         # cluster info
         self.peers = set(peers) if peers else set()
         self.leader_host_port: Tuple(str, int) = None
 
-        # append entries (log replication)
-        self.local_entry_queue: Queue[Tuple[Message, Callable]] = Queue()
-        self.sent_entry_queue: Queue[Tuple[Message, Callable]] = Queue()
-        self.entry_ack_nodes = 0
-        # buffer queue for follower to keep entries
-        self.buffer_queue: Queue[Message] = Queue()
-
         self.stopped = False
+
+        self.logger: logging.Logger = None
 
     @property
     def all_nodes(self):
@@ -60,10 +44,40 @@ class RaftNode:
     def majority(self):
         return (len(self.peers) + 1) / 2
 
-    @property
-    def is_leader(self):
-        """Check if the current node is a leader"""
-        return self.state == NodeState.LEADER
+    @abstractmethod
+    def get_append_entries_for_heartbeat(self) -> Message:
+        """`LogReplication` will override method for `LeaderElection` to use"""
+        pass
+
+    @abstractmethod
+    def check_majority_append_entries(self, msg: Message, self_check=False):
+        """`LogReplication` will override method for `LeaderElection` to use"""
+        pass
+
+
+class LeaderElection(BaseNode, ABC):
+    HEARTBEAT_INTERVAL = 0.15  # seconds
+    HEARTBEAT_TIMEOUT = 3  # seconds
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        # list of peer host and port
+        peers: List[Tuple[str, int]] = None,
+        election_timeout: float = 0,
+    ):
+        BaseNode.__init__(self, host, port, peers)
+        self._state: NodeState = None
+        self.state = NodeState.FOLLOWER
+
+        self.election_term = 0
+        self.voted = False
+        self.vote_count = 0
+
+        # timeout
+        self.predefined_election_timeout = election_timeout
+        self.timer: Timer = None
 
     @property
     def election_timeout(self):
@@ -71,6 +85,11 @@ class RaftNode:
         return self.predefined_election_timeout * 1000 or (
             self.HEARTBEAT_INTERVAL * 1000 + random.random() * 150
         )
+
+    @property
+    def is_leader(self):
+        """Check if the current node is a leader"""
+        return self.state == NodeState.LEADER
 
     @property
     def state(self):
@@ -84,12 +103,20 @@ class RaftNode:
             f"{self.__class__.__name__} {self.port} {self._state.name}"
         )
 
-    @property
-    def sync_data(self):
-        raise NotImplementedError("Please implement sync_data")
+    def start_election(self):
+        self.__reset_election_timeout()
 
-    def set_stopped(self, value: bool):
-        self.stopped = value
+    def __reset_election_timeout(self):
+        """Reset election timeout. If the node is a leader, timer will not restart"""
+        # cancel
+        if isinstance(self.timer, Timer):
+            self.timer.cancel()
+        # restart
+        if self.state != NodeState.LEADER:
+            self.timer = Timer(
+                self.election_timeout / 1000, self.__convert_to_candidate
+            )
+            self.timer.start()
 
     def __convert_to_candidate(self):
         """
@@ -124,92 +151,6 @@ class RaftNode:
                 # reset timeout in case more than one candidate in the cluster at the same election_term
                 self.__reset_election_timeout()
 
-    def __reset_vote(self):
-        self.voted = False
-        self.vote_count = 0
-
-    def __check_convert_to_leader(self):
-        """become leader when receiving a majority of votes"""
-        if self.vote_count > self.majority:
-            self.__reset_vote()
-            self.state = NodeState.LEADER
-            self.logger.info(f"New leader {self.host}:{self.port}")
-
-            self.__reset_election_timeout()
-            Thread(target=self.__send_heartbeats).start()
-
-    def handle_request_to_vote(self, client_socket: socket.socket, msg: Message):
-        """Vote a node to be next possible leader
-
-        Args:
-            host (str): host to vote on
-            port (int): port to vote on
-        """
-        with self.lock:
-            msg_term = int(msg.election_term)
-            if self.election_term < msg_term:
-                # convert to follower
-                self.election_term = msg_term
-                self.voted = True
-                self.state = NodeState.FOLLOWER
-                vote = Message(MessageTypes.VOTE)
-                client_socket.sendall(vote.to_bytes())
-                self.logger.info(f"Vote to leader {msg.dest_host}:{msg.dest_port}, term: {self.election_term}")
-                # reset timer
-                self.__reset_election_timeout()
-
-    def __reset_election_timeout(self):
-        """Reset election timeout. If the node is a leader, timer will not restart"""
-        # cancel
-        if isinstance(self.timer, Timer):
-            self.timer.cancel()
-        # restart
-        if self.state != NodeState.LEADER:
-            self.timer = Timer(
-                self.election_timeout / 1000, self.__convert_to_candidate
-            )
-            self.timer.start()
-
-    def on_receive_heartbeat(
-        self,
-        client_socket: socket.socket,
-        msg: Message,
-    ):
-        """Receive heartbeat, reset countdown timer
-
-        Args:
-            heartbeat_time (datetime.datetime): received heartbeat time
-        """
-        self.logger.debug(
-            f"Received heartbeat from {msg.dest_host}:{msg.dest_port}, send ACK back"
-        )
-        self.__reset_vote()
-        self.__reset_election_timeout()
-
-        # send ACK
-        client_socket.sendall(Message(MessageTypes.ACK).to_bytes())
-
-        # append entries
-        while not self.buffer_queue.empty():
-            # confirmation heartbeat received, empty buffer
-            self.handle_append_entries(self.buffer_queue.get())
-        if msg.nested_msg:
-            # store in buffer, wait for next `heartbeat` as a confirmation
-            self.logger.info("Received append_entries, store in buffer")
-            self.buffer_queue.put(msg.nested_msg)
-
-        # update cluster info
-        leader_host = msg.dest_host
-        leader_port = msg.dest_port
-        self.leader_host_port = (leader_host, leader_port)
-        self.peers = set([tuple(p) for p in msg.all_nodes if p != (self.host, self.port)])
-
-    def handle_append_entries(self, append_entries: Message):
-        """Override to handle incoming append_entries from the leader"""
-        raise Exception(
-            "Please override this method to handle incoming append_entries form the leader"
-        )
-
     def __send_request_to_vote(self, peer_host: str, peer_port: int, msg: Message):
         """Send REQUEST_TO_VOTE to one peer
 
@@ -238,23 +179,34 @@ class RaftNode:
                 self.logger.info(f"Node leave the cluster: {peer_host}:{peer_port}")
                 self.peers.remove((peer_host, peer_port))
 
+    def __reset_vote(self):
+        self.voted = False
+        self.vote_count = 0
+
+    def __check_convert_to_leader(self):
+        """become leader when receiving a majority of votes"""
+        if self.vote_count > self.majority:
+            self.__reset_vote()
+            self.state = NodeState.LEADER
+            self.leader_host_port = (self.host, self.port)
+            self.logger.info(f"New leader {self.host}:{self.port}")
+
+            self.__reset_election_timeout()
+            Thread(target=self.__send_heartbeats).start()
+
     def __send_heartbeats(self) -> None:
         """Send heartbeat to all peers"""
         while not self.stopped and self.state == NodeState.LEADER:
             with self.lock:
                 self.entry_ack_nodes = 1
-                nested_msg = None
-                if not self.local_entry_queue.empty():
-                    msg, callback = self.local_entry_queue.get()
-                    self.sent_entry_queue.put((msg, callback))
-                    nested_msg = msg
+                nested_msg = self.get_append_entries_for_heartbeat()
                 msg = Message(
                     MessageTypes.HEARTBEAT,
                     dest_host=self.host,
                     dest_port=self.port,
                     # send with heartbeat
-                    nested_msg=nested_msg,
-                    all_nodes=self.all_nodes,
+                    nested_msg=nested_msg,  # append entries
+                    all_nodes=self.all_nodes,  # cluster info
                 )
                 for peer_host, peer_port in self.peers:
                     Thread(
@@ -289,17 +241,115 @@ class RaftNode:
                 )
                 # append_entries
                 if msg.nested_msg:
-                    self.__check_append_entries()
+                    self.check_majority_append_entries(msg)
             except (ConnectionRefusedError, socket.timeout):
                 # mark the node leave if get refused or timeout
                 with self.lock:
                     self.logger.info(f"Node leave the cluster: {peer_host}:{peer_port}")
                     self.peers.remove((peer_host, peer_port))
 
-    def __check_append_entries(self, self_check=False):
-        """If majority of peers ack, append entries on current node (leader)
+    def handle_request_to_vote(self, client_socket: socket.socket, msg: Message):
+        """Vote a node to be next possible leader
 
         Args:
+            host (str): host to vote on
+            port (int): port to vote on
+        """
+        with self.lock:
+            msg_term = int(msg.election_term)
+            if self.election_term < msg_term:
+                # convert to follower
+                self.election_term = msg_term
+                self.voted = True
+                self.state = NodeState.FOLLOWER
+                vote = Message(MessageTypes.VOTE)
+                client_socket.sendall(vote.to_bytes())
+                self.logger.info(
+                    f"Vote to leader {msg.dest_host}:{msg.dest_port}, term: {self.election_term}"
+                )
+                # reset timer
+                self.__reset_election_timeout()
+
+    def __update_cluster_info(self, msg: Message):
+        """Update cluster info based on msg from the leader, so that current node has a big picture of the cluster"""
+        leader_host = msg.dest_host
+        leader_port = msg.dest_port
+        self.leader_host_port = (leader_host, leader_port)
+        self.peers = set(
+            [tuple(p) for p in msg.all_nodes if p != (self.host, self.port)]
+        )
+
+    def on_receive_heartbeat(
+        self,
+        client_socket: socket.socket,
+        msg: Message,
+    ):
+        """Receive heartbeat, reset countdown timer
+
+        Args:
+            heartbeat_time (datetime.datetime): received heartbeat time
+        """
+        self.logger.debug(
+            f"Received heartbeat from {msg.dest_host}:{msg.dest_port}, send ACK back"
+        )
+        self.__reset_vote()
+        self.__reset_election_timeout()
+
+        # send ACK back to the leader
+        client_socket.sendall(Message(MessageTypes.ACK).to_bytes())
+        # update cluster info
+        self.__update_cluster_info(msg)
+
+    def forward_to_leader(self, msg: Message):
+        """Forward message to leader, usually a `write` message like SUBSCRIBE"""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            self.logger.info(
+                f"Forward {msg.type.name} to leader: {self.leader_host_port}"
+            )
+            s.connect(self.leader_host_port)
+            s.sendall(msg.to_bytes())
+
+
+class LogReplication(BaseNode, ABC):
+    def __init__(self):
+        # append entries (log replication)
+        self.local_entry_queue: Queue[Tuple[Message, Callable]] = Queue()
+        self.sent_entry_queue: Queue[Tuple[Message, Callable]] = Queue()
+        self.entry_ack_nodes = 0
+        # buffer queue for follower to keep entries
+        self.buffer_queue: Queue[Message] = Queue()
+
+    @abstractmethod
+    def handle_append_entries(self, entry: Message):
+        """Override to handle incoming append_entries from the leader"""
+        raise Exception(
+            "Please override this method to handle incoming append_entries form the leader"
+        )
+
+    def get_append_entries_for_heartbeat(self):
+        """Leader sends `append_entries` to followers along with heartbeat"""
+        if not self.local_entry_queue.empty():
+            msg, callback = self.local_entry_queue.get()
+            self.sent_entry_queue.put((msg, callback))
+            return msg
+        return None
+
+    def on_receive_heartbeat(self, msg: Message):
+        """Append entries to local when receiving a heartbeat"""
+        while not self.buffer_queue.empty():
+            # confirmation heartbeat received, empty buffer
+            self.handle_append_entries(self.buffer_queue.get())
+        if msg.nested_msg:
+            # store in buffer, wait for next `heartbeat` as a confirmation
+            # similar to 2PC protocol
+            self.logger.info("Received append_entries, store in buffer")
+            self.buffer_queue.put(msg.nested_msg)
+
+    def check_majority_append_entries(self, msg: Message, self_check=False):
+        """For leader, if majority of peers ACK, append entries on leader node
+
+        Args:
+            msg (Message): Message that leader send to followers, `append_entries` is in `nested_msg` field
             self_check (bool, optional): Whether this method is called by leader node itself. Defaults to False.
         """
         # only increment when it is called because of an ACK from peers
@@ -314,15 +364,6 @@ class RaftNode:
                 if callback:
                     callback(msg)
 
-    def forward_to_leader(self, client_socket: socket.socket, msg: Message):
-        """Forward message to leader, usually a `write` message like SUBSCRIBE"""
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            self.logger.info(
-                f"Forward {msg.type.name} to leader: {self.leader_host_port}"
-            )
-            s.connect(self.leader_host_port)
-            s.sendall(msg.to_bytes())
-
     def setup_append_entries(self, append_entries: Message, callback: Callable):
         """Setup append_entries. This message will send to peers in the next heartbeat"""
         if len(self.peers) == 0:
@@ -330,16 +371,22 @@ class RaftNode:
             self.sent_entry_queue.put((append_entries, callback))
         else:
             self.local_entry_queue.put((append_entries, callback))
-        self.__check_append_entries(self_check=True)
+        self.check_majority_append_entries(append_entries, self_check=True)
+
+
+class DynamicMembership(BaseNode, ABC):
+    def __init__(self):
+        pass
+
+    @property
+    def sync_data(self):
+        raise NotImplementedError("Please implement sync_data")
 
     def request_join_cluster(self, source: Tuple[str, int], dest: Tuple[str, int]):
         """Send a request to join a cluster to the destination node"""
         Thread(
             target=self.__request_join_cluster,
-            args=(
-                source,
-                dest,
-            ),
+            args=(source, dest),
         ).start()
 
     def __request_join_cluster(self, source: Tuple[str, int], dest: Tuple[str, int]):
@@ -381,6 +428,12 @@ class RaftNode:
             self.peers.add((host, port))
             self.logger.info(f"New node joins the cluster {host}:{port}")
 
+    @abstractmethod
+    def handle_sync(self, msg: Message, client_socket: socket.socket):
+        raise Exception(
+            "Please override this method, in the end call `after_handle_sync`"
+        )
+
     def after_handle_sync(self, msg: Message, client_socket: socket.socket):
         """After setting up sync_data, call this function"""
         # send ACK
@@ -388,11 +441,67 @@ class RaftNode:
         # with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         #     s.connect((msg.dest_host, msg.dest_port))
         #     s.sendall(Message(MessageTypes.ACK).to_bytes())
-        
+
         # run node (start election timeout)
         self.election_term = msg.election_term
         self.peers = set([tuple(p) for p in msg.all_nodes])
-        RaftNode.run(self)
+        self.start_election()
+
+    @abstractmethod
+    def start_election(self):
+        raise Exception("Please override this method")
+
+
+class RaftNode(LeaderElection, LogReplication, DynamicMembership):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        # list of peer host and port
+        peers: List[Tuple[str, int]] = None,
+        election_timeout: float = 0,
+    ):
+        LeaderElection.__init__(self, host, port, peers, election_timeout)
+        LogReplication.__init__(self)
+        DynamicMembership.__init__(self)
+
+    def on_receive_heartbeat(
+        self,
+        client_socket: socket.socket,
+        msg: Message,
+    ):
+        """Receive heartbeat, reset countdown timer
+
+        Args:
+            heartbeat_time (datetime.datetime): received heartbeat time
+        """
+        self.logger.debug(
+            f"Received heartbeat from {msg.dest_host}:{msg.dest_port}, send ACK back"
+        )
+        LeaderElection.on_receive_heartbeat(self, client_socket, msg)
+        LogReplication.on_receive_heartbeat(self, msg)
+
+    def handle_join_cluster(self, msg: Message):
+        """Leader need to handle the request to join a node in the cluster"""
+        if self.is_leader:
+            DynamicMembership.handle_join_cluster(self, msg)
+        else:
+            # Forward to leader if current node is not a leader
+            self.forward_to_leader(msg)
+
+    def handle_update(self, msg: Message):
+        """Update operation needs to forward to leader to make sure majority nodes agree on executing the update"""
+        if self.is_leader:
+            self.logger.info(
+                f"New {msg.type.name} to `{msg.topic}` from {msg.dest_host}:{msg.dest_port}"
+            )
+            self.setup_append_entries(msg, self.handle_append_entries)
+        else:
+            # Forward to leader if current node is not a leader
+            self.forward_to_leader(msg)
+
+    def set_stopped(self, value: bool):
+        self.stopped = value
 
     def run(self):
-        self.__reset_election_timeout()
+        self.start_election()
