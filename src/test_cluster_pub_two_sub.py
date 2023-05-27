@@ -46,8 +46,8 @@ def main():
         Subscriber(*host_ips[1], port=SUBSCRIBER_PORT + 5),
     ]
     for idx, sub in enumerate(subscribers):
-        sub.run()
         print(f"\n\n==================== Subscribe to Node {idx + 1} ====================")
+        sub.run()
         sub.subscribe(topic)
     time.sleep(1)
 
