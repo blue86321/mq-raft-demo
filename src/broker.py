@@ -27,15 +27,18 @@ class Broker(RaftNode):
         self.topic_subscribers: Dict[str, Set[Tuple[str, int]]] = {}
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+        #Initialize message persistence storage
+        self.message_store: Dict[str, List[Message]] = {}
     @property
     def sync_data(self):
-        return self.topic_subscribers
+        return {"topic_subscribers": self.topic_subscribers, "message_store": self.message_store}
 
     def handle_sync(self, msg: Message, client_socket: socket.socket):
         """For new node joins the cluster"""
         # Sync all `topic_subscribers` received from the leader
         if msg.sync_data:
             self.topic_subscribers = {topic: set([tuple(host) for host in host_list]) for topic, host_list in msg.sync_data.items()}
+            self.message_store = msg.sync_data.get("message_store", {})
         # start node election
         super().after_handle_sync(msg, client_socket)
 
@@ -49,6 +52,10 @@ class Broker(RaftNode):
                         s.sendall(msg.to_bytes())
                 except ConnectionRefusedError:
                     pass
+        if msg.topic not in self.message_store:
+            self.message_store[msg.topic] = []
+        self.message_store[msg.topic].append(msg)
+
 
     def handle_subscribe(self, msg: Message):
         if msg.topic not in self.topic_subscribers:
@@ -123,6 +130,27 @@ class Broker(RaftNode):
         elif msg.type == MessageTypes.SYNC_DATA:
             self.handle_sync(msg, client_socket)
 
+    def filter_messages_by_topic(self, topic: str) -> List[Message]:
+        """Filter messages by topic"""
+        if topic in self.message_store:
+            return self.message_store[topic]
+        return []
+
+    def route_message(self, msg: Message, target_host: str, target_port: int):
+        """Route a message to a specific host and port"""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((target_host, target_port))
+                s.sendall(msg.to_bytes())
+        except ConnectionRefusedError:
+            pass
+
+    def transform_message(self, msg: Message, transform_func):
+        """Transform a message using a provided transform function"""
+        transformed_msg = transform_func(msg)
+        if transformed_msg:
+            self.handle_publish(transformed_msg)
+            
     def run(self) -> None:
         """Start the broker and listen for client connections"""
         self.logger.info(f"Running on {self.host}:{self.port}")

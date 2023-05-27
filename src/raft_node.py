@@ -14,13 +14,19 @@ class RaftNode:
     HEARTBEAT_INTERVAL = 0.3    # seconds
     HEARTBEAT_TIMEOUT = 3       # seconds
 
+    # Initialization of RaftNode object
+        # Parameters:
+        # - host: The host address of the current node
+        # - port: The port number of the current node
+        # - peers: A list of tuples representing the host and port of other nodes in the cluster (default: None)
+        # - election_timeout: The election timeout for the node in seconds (default: 0)
     def __init__(
         self,
         host: str,
         port: int,
         # list of peer host and port
         peers: List[Tuple[str, int]] = None,
-        election_timeout: float = 0,
+        election_timeout: float = 0.0,
     ):
         self.host = host
         self.port = port
@@ -39,7 +45,7 @@ class RaftNode:
         self.peers = set(peers) if peers else set()
         self.leader_host_port: Tuple(str, int) = None
 
-        # append entries (log replication)
+        # Append entries (log replication)
         self.local_entry_queue: Queue[Tuple[Message, Callable]] = Queue()
         self.sent_entry_queue: Queue[Tuple[Message, Callable]] = Queue()
         self.entry_ack_nodes = 0
@@ -50,7 +56,7 @@ class RaftNode:
 
     @property
     def all_nodes(self):
-        """ALl nodes in the cluster"""
+        # Returns all nodes in the cluster including the current node
         all_peers = set()
         all_peers.add((self.host, self.port))
         all_peers.update(self.peers)
@@ -58,27 +64,29 @@ class RaftNode:
 
     @property
     def majority(self):
+        # Returns the majority count required for consensus
         return (len(self.peers) + 1) / 2
 
     @property
     def is_leader(self):
-        """Check if the current node is a leader"""
+        # Checks if the current node is the leader
         return self.state == NodeState.LEADER
 
     @property
     def election_timeout(self):
-        """Timeout for election in millisecond. If timeout reached, node becomes a candidate"""
+        # Returns the election timeout for the node in milliseconds
         return self.predefined_election_timeout * 1000 or (
             self.HEARTBEAT_INTERVAL * 1000 + random.random() * 150
         )
 
     @property
     def state(self):
-        """Node state (e.g. FOLLOWER, LEADER)"""
+        # Returns the current state of the node (e.g., FOLLOWER, LEADER)
         return self._state
 
     @state.setter
     def state(self, state: NodeState):
+        # Sets the current state of the node
         self._state = state
         self.logger = logging.getLogger(
             f"{self.__class__.__name__} {self.port} {self._state.name}"
@@ -86,10 +94,18 @@ class RaftNode:
 
     @property
     def sync_data(self):
+        """
+        This property needs to be implemented.
+        It should return the data that needs to be synchronized with new nodes joining the cluster.
+        
+        """
         raise NotImplementedError("Please implement sync_data")
 
     def set_stopped(self, value: bool):
+        # Sets the `stopped` flag of the node
         self.stopped = value
+
+    #methods for managing the node's state and behavior
 
     def __convert_to_candidate(self):
         """
@@ -137,6 +153,8 @@ class RaftNode:
 
             self.__reset_election_timeout()
             Thread(target=self.__send_heartbeats).start()
+
+    #methods for handling different types of messages
 
     def handle_request_to_vote(self, client_socket: socket.socket, msg: Message):
         """Vote a node to be next possible leader
@@ -210,6 +228,7 @@ class RaftNode:
             "Please override this method to handle incoming append_entries form the leader"
         )
 
+    #methods for intercommunications
     def __send_request_to_vote(self, peer_host: str, peer_port: int, msg: Message):
         """Send REQUEST_TO_VOTE to one peer
 
@@ -332,6 +351,7 @@ class RaftNode:
             self.local_entry_queue.put((append_entries, callback))
         self.__check_append_entries(self_check=True)
 
+    #methods for managing the node's interaction with the cluster
     def request_join_cluster(self, source: Tuple[str, int], dest: Tuple[str, int]):
         """Send a request to join a cluster to the destination node"""
         Thread(

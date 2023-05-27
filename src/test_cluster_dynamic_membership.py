@@ -37,25 +37,41 @@ def main():
         broker.run()
     time.sleep(2)
 
-    print("\n\n==================== Node Join ====================")
+    
+    def process_command(self, command):
+        parts = command.split()
+        if len(parts) < 3:
+            raise ValueError("Invalid command. Usage: add <cluster_id> <node_id>")
 
-    broker3 = Broker(
-        host=host_ips[1][0],
-        port=host_ips[1][1] + 2,
-        join_dest=host_ips[1],
-        election_timeout=1,
-    )
-    broker3.run()
-    time.sleep(2)
+        if parts[0].lower() == "add":
+            print("\n\n==================== Node Join ====================")
+            cluster_id = parts[1]
+            node_id = parts[2]
+            new_broker = Broker(
+                host=cluster_id,
+                port=node_id,
+                join_dest=host_ips[1],
+                election_timeout=1,
+            )
+            brokers.append(new_broker)
+            new_broker.run()
+            time.sleep(2)
+            # self.add_node_to_cluster(cluster_id, node_id)
+            # print(f"Node '{node_id}' added to cluster '{cluster_id}'.")
+        elif parts[0].lower() == "del":
+            print("\n\n==================== Node Leave ====================")
+            broker1.stop()
+            time.sleep(2)
+        elif parts[0].lower() == "stopall":
+            for broker in brokers:
+                broker.stop()
 
-    print("\n\n==================== Node Leave ====================")
-
-    broker3.stop()
-    time.sleep(2)
-
-    # stop
-    for broker in brokers:
-        broker.stop()
+    while True:
+        command = input("Enter command: ")
+        try:
+            process_command(command)
+        except ValueError as e:
+            print(f"Error: {str(e)}")
 
 
 if __name__ == "__main__":
