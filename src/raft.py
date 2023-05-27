@@ -57,9 +57,10 @@ class BaseNode(ABC):
 
 class LeaderElection(BaseNode, ABC):
     """Leader Election
-    Follower has a timeout, if the leader does not send a heartbeat before timeout, the follower will become a candidate.
-    Candidate will send REQUEST_TO_VOTE to all nodes, each node can only vote once in a given election term.
-    Candidate with the majority vote will become a leader, and keep sending heartbeat to all nodes regularly.
+    If a follower does not receive a heartbeat from the leader before its timeout expires, it becomes a candidate.
+    The candidate then sends a REQUEST_TO_VOTE message to all nodes in the cluster. Each node can only vote once in a given election term.
+    The candidate that receives the majority of votes becomes the new leader and continues to send heartbeats to all nodes regularly.
+    If no candidate receives the majority of votes before the timeout expires, a new election term begins.
     """
     HEARTBEAT_INTERVAL = 0.15  # seconds
     HEARTBEAT_TIMEOUT = 3  # seconds
@@ -317,16 +318,16 @@ class LeaderElection(BaseNode, ABC):
 
 class LogReplication(BaseNode, ABC):
     """Log Replication
-    Log replication happens when there is an update request to the cluster.
-    
-    When followers receive an update request, it will forward to the leader.
-    When a leader receives an update request, it will keep the request locally, and send the request to all nodes in the cluster.
-    
-    Followers receive an update request from the leader, will store the request in local buffer and reply ACK.
-    When majority of nodes ACK, the leader will update locally and send ACK to the client.
-    Followers will update locally at the next heartbeat.
-    
-    The whole idea is similar to two-phase commit (2PC)
+    Log replication occurs when there is an update request to the cluster.
+
+    When followers receive an update request, they forward it to the leader.
+    When a leader receives an update request, it keeps the request locally and sends it to all nodes in the cluster.
+
+    Followers receive an update request from the leader, store the request in a local buffer, and reply with an ACK.
+    When the majority of nodes ACK, the leader updates its local copy and sends an ACK to the client.
+    Followers update their local copies during the next heartbeat.
+
+    The overall concept is similar to the two-phase commit (2PC) protocol.
     """
     def __init__(self):
         # append entries (log replication)
@@ -393,13 +394,20 @@ class LogReplication(BaseNode, ABC):
 
 class DynamicMembership(BaseNode, ABC):
     """Dynamic Membership
-    Leader sends cluster info to all nodes in the cluster at each heartbeat.
-    
-    If a new node wants to join the cluster, it should send a JOIN_CLUSTER request to one node of the clusters.
-    When followers receive a JOIN_CLUSTER will forward to the leader.
-    When a leader receives a JOIN_CLUSTER request, it will send SYNC_DATA to the new node.
-    New node will update local data to synchronize with the leader, and then respond ACK.
-    When a leader receives an ACK, it will join the new node to the cluster and notify all nodes in the cluster at next heartbeat.
+    Leader sends cluster information to all nodes in the cluster at each heartbeat.
+
+    JOIN:
+        If a new node wants to join the cluster, it should send a JOIN_CLUSTER request to one node in the cluster.
+        When followers receive a JOIN_CLUSTER request, they forward it to the leader.
+        When a leader receives a JOIN_CLUSTER request, it will send a SYNC_DATA message to the new node.
+        The new node updates its local data to synchronize with the leader and responds with an ACK.
+        Upon receiving the ACK, the leader adds the new node to the cluster and notifies all nodes in the cluster during the next heartbeat.
+
+    LEAVE:
+        Two situations will be regarded as a node leaving for a leader:
+            1. A node does not ACK the leader's heartbeat before the HEARTBEAT_TIMEOUT.
+            2. A node closes the socket, resulting in a `refuse to connect` from the node.
+        In either case, the leader updates the cluster information and sends it to all nodes in the cluster.
     """
     def __init__(self):
         pass
