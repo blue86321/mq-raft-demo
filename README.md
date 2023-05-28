@@ -208,7 +208,7 @@ python src/test_cluster_pub_two_sub.py
 ### Broker Cluster Features
 #### Fault Tolerance
 ```shell
-python src/test_cluster_false_tolerant.py
+python src/test_cluster_fault_tolerance.py
 ```
 
 <img width="700" src="./imgs/DemoFaultTolerance.jpg">
