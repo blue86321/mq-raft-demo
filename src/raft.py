@@ -177,13 +177,15 @@ class LeaderElection(BaseNode, ABC):
                 msg = Message.from_bytes(data)
                 self.logger.debug(f"Be voted by {peer_host}:{peer_port}")
                 self.vote_count += 1
-                if self.state == NodeState.CANDIDATE:
-                    self.__check_convert_to_leader()
         except ConnectionRefusedError:
             # view a node as leaving if it refuses connection while voting
             with self.lock:
                 self.logger.info(f"Node leave the cluster: {peer_host}:{peer_port}")
                 self.peers.remove((peer_host, peer_port))
+        finally:
+            # check convert_to_leader no matter ACK or remove nodes
+            if self.state == NodeState.CANDIDATE:
+                    self.__check_convert_to_leader()
 
     def __reset_vote(self):
         self.voted = False
@@ -245,14 +247,15 @@ class LeaderElection(BaseNode, ABC):
                 self.logger.debug(
                     f"Received {ack.type.name} from {peer_host}:{peer_port}"
                 )
-                # append_entries
-                if msg.nested_msg:
-                    self.check_majority_append_entries(msg)
             except (ConnectionRefusedError, socket.timeout):
                 # mark the node leave if get refused or timeout
                 with self.lock:
                     self.logger.info(f"Node leave the cluster: {peer_host}:{peer_port}")
                     self.peers.remove((peer_host, peer_port))
+            finally:
+                # check append_entries no matter ACK or remove nodes
+                if msg.nested_msg:
+                    self.check_majority_append_entries(msg)
 
     def handle_request_to_vote(self, client_socket: socket.socket, msg: Message):
         """Vote a node to be next possible leader
