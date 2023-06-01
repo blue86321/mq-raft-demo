@@ -1,43 +1,78 @@
-import configparser
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import logging
+import time
+from threading import Thread
 
-class RequestHandler(BaseHTTPRequestHandler):
-    def _set_response(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
+from broker import Broker
+from subscriber import Subscriber
+from publisher import Publisher
+from utils import BROKER_HOST, BROKER_PORT
 
-    def do_GET(self):
-        self._set_response()
-        self.wfile.write("Hello, distributed system!".encode('utf-8'))
 
-def start_server(ip, port):
-    server_address = (ip, port)
-    httpd = HTTPServer(server_address, RequestHandler)
-    print(f"Starting server on {ip}:{port}...")
-    httpd.serve_forever()
+def start_broker(host, port, peers=None, join_dest=None):
+    broker = Broker(host=host, port=port, peers=peers, join_dest=join_dest)
+    broker.run()
 
-def initialize_system():
-    config = configparser.ConfigParser()
-    config.read('config.ini')
 
-    num_nodes = int(config['General']['num_nodes'])
-    node_ips = config['General']['node_ips'].split(',')
-    node_ports = config['General']['node_ports'].split(',')
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
-    if num_nodes != len(node_ips) or num_nodes != len(node_ports):
-        print("Error: Configuration mismatch!")
-        return
+    # Define the host IPs and ports for the brokers
+    host_ips = [(BROKER_HOST, BROKER_PORT), (BROKER_HOST, BROKER_PORT + 1),(BROKER_HOST, BROKER_PORT + 2)]
 
-    threads = []
-    for i in range(num_nodes):
-        t = threading.Thread(target=start_server, args=(node_ips[i], int(node_ports[i])))
-        threads.append(t)
-        t.start()
+    # Start the brokers in separate threads
+    broker_threads = []
+    for i, (host, port) in enumerate(host_ips):
+        if i == 0:
+            # First broker joins the cluster without specifying peers
+            thread = Thread(target=start_broker, args=(host, port))
+        else:
+            # Other brokers join the cluster by specifying the previous broker as the peer
+            thread = Thread(
+                target=start_broker,
+                args=(host, port),
+                kwargs={"peers": [host_ips[i-1]]},
+            )
+        thread.start()
+        broker_threads.append(thread)
 
-    for thread in threads:
+    # Wait for all broker threads to complete
+    for thread in broker_threads:
         thread.join()
 
-if __name__ == '__main__':
-    initialize_system()
+    time.sleep(2)
+
+    topic = "topic1"
+
+    print("\n\n==================== Publish ====================")
+    publisher = Publisher()
+    publisher.publish(topic, "Hello, world!")
+    time.sleep(0.5)
+    
+    print("\n\n==================== Subscribe ====================")
+    # subscriber
+    subscriber = Subscriber()
+    subscriber.run()
+    subscriber.subscribe(topic)
+    time.sleep(1)
+
+    print("\n\n==================== Node D added ====================")
+    broker4 = Broker(
+        host=host_ips[0][0],
+        port=host_ips[0][1]+3,
+        peers=[host_ips[0],host_ips[1], host_ips[2]],
+        election_timeout=0.5,
+    )
+
+    broker4.run()
+    print("\n\n==================== Node D encounter a problem ====================")
+    time.sleep(2)
+    broker4.stop()
+
+    broker4.run()
+
+
+
