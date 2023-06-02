@@ -8,7 +8,7 @@ from queue import Queue
 from threading import Thread, Timer
 from typing import Callable, List, Tuple
 
-from utils import Message, MessageTypes, NodeState
+from src.utils import Message, MessageTypes, NodeState
 
 
 class BaseNode(ABC):

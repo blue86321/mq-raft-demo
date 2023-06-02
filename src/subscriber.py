@@ -1,7 +1,7 @@
 import logging
 import socket
 import threading
-from utils import (
+from src.utils import (
     BROKER_HOST,
     BROKER_PORT,
     SUBSCRIBER_HOST,
@@ -57,6 +57,8 @@ class Subscriber:
         """Receive message from the broker"""
         self.logger.info(f"Subscriber is running on {self.host}:{self.port}")
         self.recv_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # reuse to avoid OSError: [Errno 48] Address already in use
+        self.recv_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.recv_socket.bind((self.host, self.port))
         self.recv_socket.listen(5)
         while True:

@@ -1,7 +1,7 @@
 import logging
 import socket
 
-from utils import BROKER_HOST, BROKER_PORT, Message, MessageTypes
+from src.utils import BROKER_HOST, BROKER_PORT, Message, MessageTypes
 
 
 class Publisher:
