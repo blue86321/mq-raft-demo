@@ -282,7 +282,7 @@ def test_dynamic_membership():
         join_dest=host_ips[0],
     )
     broker2.run()
-    time.sleep(1)
+    time.sleep(1.5)
 
     assert broker1.is_leader
     assert (broker2.host, broker2.port) in broker1.peers

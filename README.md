@@ -44,7 +44,7 @@ pip install .
 
 # Test
 
-# Run demo...
+# Run Examples...
 ```
 
 ### Exit Environment
@@ -54,7 +54,7 @@ rm -rf venv build mq_raft_demo.egg-info .pytest_cache
 ```
 
 
-### Test
+## Test
 ```shell
 pytest
 ```
