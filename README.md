@@ -42,6 +42,8 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
+# Test
+
 # Run demo...
 ```
 
@@ -49,6 +51,28 @@ pip install -r requirements.txt
 ```shell
 deactivate
 rm -rf venv
+```
+
+
+### Test
+```shell
+pytest
+```
+
+#### Expected Test Result
+```
+=========== test session starts ============
+configfile: pytest.ini
+collected 15 items                                                                                         
+
+tests/integration/test_basic.py .                               [  6%]
+tests/integration/test_cluster_dynamic_membership_pub_sub.py .  [ 13%]
+tests/integration/test_cluster_pub_one_sub.py .                 [ 20%]
+tests/integration/test_cluster_pub_two_sub.py .                 [ 26%]
+tests/unit/test_borker.py ........                              [ 80%]
+tests/unit/test_publish.py .                                    [ 86%]
+tests/unit/test_subscribe.py ..                                 [100%]
+=========== 15 passed in 42.31s ============
 ```
 
 
