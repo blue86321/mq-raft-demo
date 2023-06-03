@@ -281,20 +281,26 @@ python examples/fault_tolerance.py
 
 ```log
 ==================== Broker ====================
-2023-06-02 22:53:54 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
-2023-06-02 22:53:54 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
-2023-06-02 22:53:54 [Broker 8002 FOLLOWER] INFO: Running on localhost:8002
-2023-06-02 22:53:55 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
-2023-06-02 22:53:55 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
-2023-06-02 22:53:55 [Broker 8000 LEADER] INFO: New leader localhost:8000
-2023-06-02 22:53:55 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
+2023-06-02 23:39:15 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
+2023-06-02 23:39:15 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
+2023-06-02 23:39:15 [Broker 8002 FOLLOWER] INFO: Running on localhost:8002
+2023-06-02 23:39:16 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
+2023-06-02 23:39:16 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
+2023-06-02 23:39:16 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
+2023-06-02 23:39:16 [Broker 8000 LEADER] INFO: New leader localhost:8000
 
 
 ==================== Leader Fail ====================
-2023-06-02 22:53:57 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
-2023-06-02 22:53:57 [Broker 8001 CANDIDATE] INFO: Node leave the cluster: localhost:8000
-2023-06-02 22:53:57 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8001, term: 2
-2023-06-02 22:53:57 [Broker 8001 LEADER] INFO: New leader localhost:8001
+2023-06-02 23:39:17 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
+2023-06-02 23:39:17 [Broker 8001 CANDIDATE] INFO: Node leave the cluster: localhost:8000
+2023-06-02 23:39:17 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8001, term: 2
+2023-06-02 23:39:17 [Broker 8001 LEADER] INFO: New leader localhost:8001
+
+
+==================== Another Leader Fail ====================
+2023-06-02 23:39:19 [Broker 8002 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 3
+2023-06-02 23:39:19 [Broker 8002 CANDIDATE] INFO: Node leave the cluster: localhost:8001
+2023-06-02 23:39:19 [Broker 8002 LEADER] INFO: New leader localhost:8002
 ```
 
 ##### Dynamic Membership
