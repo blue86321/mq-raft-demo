@@ -97,13 +97,8 @@ def test_cluster_pub_two_pub(caplog):
 """ in caplog.text
 
     # Temporary inconsistent
-    assert """
-[Subscriber 9000] INFO: Received message: `Hello, too fast` on topic `topic1`
-[Subscriber 9005] INFO: Received message: `Hello, too fast` on topic `topic1`
-""" in caplog.text or """
-[Subscriber 9005] INFO: Received message: `Hello, too fast` on topic `topic1`
-[Subscriber 9000] INFO: Received message: `Hello, too fast` on topic `topic1`
-""" in caplog.text
+    assert """[Subscriber 9000] INFO: Received message: `Hello, too fast` on topic `topic1`""" in caplog.text
+    assert """[Subscriber 9005] INFO: Received message: `Hello, too fast` on topic `topic1`""" in caplog.text
 
     # Consistent
     assert """==================== Publish Later ====================
