@@ -159,7 +159,7 @@ def test_forward_leader():
     subscriber.stop()
 
 
-def test_false_tolerant(caplog):
+def test_fault_tolerance(caplog):
     caplog.set_level(logging.INFO)
     # broker
     host_ips = [

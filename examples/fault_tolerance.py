@@ -39,22 +39,24 @@ def main():
         host=host_ips[2][0],
         port=host_ips[2][1],
         peers=[host_ips[0], host_ips[1]],
-        election_timeout=2,
+        election_timeout=1.5,
     )
     brokers.append(broker3)
 
     print("\n\n==================== Broker ====================")
     for broker in brokers:
         broker.run()
-    time.sleep(2)
+    time.sleep(1)
 
     print("\n\n==================== Leader Fail ====================")
     broker1.stop()
+    time.sleep(1)
+    
+    print("\n\n==================== Another Leader Fail ====================")
+    broker2.stop()
     time.sleep(2)
 
-    # stop
-    for broker in brokers:
-        broker.stop()
+    broker3.stop()
 
 
 if __name__ == "__main__":
