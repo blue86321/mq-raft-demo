@@ -31,7 +31,7 @@ class MessageTypes(str, Enum):
 class Message:
     def __init__(
         self,
-        type: Union[MessageTypes, str],
+        msg_type: Union[MessageTypes, str],
         topic: str = "",
         content: str = "",
         dest_host: str = None,
@@ -43,7 +43,7 @@ class Message:
         ] = None,
         all_nodes: Union[Set[Tuple[str, int]], List[List[Union[str, int]]]] = None,
     ):
-        self.type = type if isinstance(type, MessageTypes) else MessageTypes(type)
+        self.type = msg_type if isinstance(msg_type, MessageTypes) else MessageTypes(msg_type)
         self.topic = topic
         self.content = content
         self.dest_host = dest_host
@@ -75,14 +75,14 @@ class Message:
         return instance
 
     @classmethod
-    def from_dict(cls, dict: Dict) -> "Message":
+    def from_dict(cls, dict_data: Dict) -> Union["Message", dict]:
         """Deserialize from a nested object"""
         
-        if dict.get("type"):
+        if dict_data.get("type"):
             # if type (a str format of MessageType) exists, convert it
-            obj = cls(dict.pop("type"))
-            obj.__dict__.update(dict)
+            obj = cls(dict_data.pop("type"))
+            obj.__dict__.update(dict_data)
             return obj
         else:
             # otherwise return dict directly (e.g. dict object like `sync_data`)
-            return dict
+            return dict_data

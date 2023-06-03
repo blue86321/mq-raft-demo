@@ -34,19 +34,19 @@ class Subscriber:
     def unsubscribe(self, topic: str) -> None:
         self.handle_operation(topic, MessageTypes.UNSUBSCRIBE)
 
-    def handle_operation(self, topic: str, type: MessageTypes) -> None:
+    def handle_operation(self, topic: str, msg_type: MessageTypes) -> None:
         """Handle the operation to send message to the broker
 
         Args:
             topic (str): message topic
-            type (MessageTypes): message type, like UN/SUBSCRIBE
+            msg_type (MessageTypes): message type, like UN/SUBSCRIBE
         """
         self.logger.info(
-            f"{type.name} message on topic `{topic}` at {self.broker_host}:{self.broker_port}"
+            f"{msg_type.name} message on topic `{topic}` at {self.broker_host}:{self.broker_port}"
         )
 
         # Create a message
-        msg = Message(type, topic, dest_host=self.host, dest_port=self.port)
+        msg = Message(msg_type, topic, dest_host=self.host, dest_port=self.port)
 
         # Send the message to the broker via a socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
