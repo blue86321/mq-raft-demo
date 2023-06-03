@@ -8,7 +8,7 @@ from queue import Queue
 from threading import Thread, Timer
 from typing import Callable, List, Tuple
 
-from utils import Message, MessageTypes, NodeState
+from src.utils import Message, MessageTypes, NodeState
 
 
 class BaseNode(ABC):
@@ -26,7 +26,7 @@ class BaseNode(ABC):
 
         # cluster info
         self.peers = set(peers) if peers else set()
-        self.leader_host_port: Tuple(str, int) = None
+        self.leader_host_port: Tuple[str, int] = None
 
         self.stopped = False
 
@@ -42,7 +42,7 @@ class BaseNode(ABC):
 
     @property
     def majority(self):
-        return (len(self.peers) + 1) / 2
+        return int((len(self.peers) + 1) / 2)
 
     @abstractmethod
     def get_append_entries_for_heartbeat(self) -> Message:
@@ -180,12 +180,13 @@ class LeaderElection(BaseNode, ABC):
         except ConnectionRefusedError:
             # view a node as leaving if it refuses connection while voting
             with self.lock:
-                self.logger.info(f"Node leave the cluster: {peer_host}:{peer_port}")
-                self.peers.remove((peer_host, peer_port))
+                if (peer_host, peer_port) in self.peers:
+                    self.logger.info(f"Node leave the cluster: {peer_host}:{peer_port}")
+                    self.peers.remove((peer_host, peer_port))
         finally:
             # check convert_to_leader no matter ACK or remove nodes
             if self.state == NodeState.CANDIDATE:
-                    self.__check_convert_to_leader()
+                self.__check_convert_to_leader()
 
     def __reset_vote(self):
         self.voted = False
@@ -193,7 +194,7 @@ class LeaderElection(BaseNode, ABC):
 
     def __check_convert_to_leader(self):
         """become leader when receiving a majority of votes"""
-        if self.vote_count > self.majority:
+        if self.vote_count > self.majority and self.state != NodeState.LEADER:
             self.__reset_vote()
             self.state = NodeState.LEADER
             self.leader_host_port = (self.host, self.port)
@@ -250,8 +251,9 @@ class LeaderElection(BaseNode, ABC):
             except (ConnectionRefusedError, socket.timeout):
                 # mark the node leave if get refused or timeout
                 with self.lock:
-                    self.logger.info(f"Node leave the cluster: {peer_host}:{peer_port}")
-                    self.peers.remove((peer_host, peer_port))
+                    if (peer_host, peer_port) in self.peers:
+                        self.logger.info(f"Node leave the cluster: {peer_host}:{peer_port}")
+                        self.peers.remove((peer_host, peer_port))
             finally:
                 # check append_entries no matter ACK or remove nodes
                 if msg.nested_msg:
@@ -259,10 +261,6 @@ class LeaderElection(BaseNode, ABC):
 
     def handle_request_to_vote(self, client_socket: socket.socket, msg: Message):
         """Vote a node to be next possible leader
-
-        Args:
-            host (str): host to vote on
-            port (int): port to vote on
         """
         with self.lock:
             msg_term = int(msg.election_term)
@@ -285,7 +283,7 @@ class LeaderElection(BaseNode, ABC):
         leader_port = msg.dest_port
         self.leader_host_port = (leader_host, leader_port)
         self.peers = set(
-            [tuple(p) for p in msg.all_nodes if p != (self.host, self.port)]
+            [tuple(p) for p in msg.all_nodes if p != [self.host, self.port]]
         )
 
     def on_receive_heartbeat(
@@ -293,11 +291,7 @@ class LeaderElection(BaseNode, ABC):
         client_socket: socket.socket,
         msg: Message,
     ):
-        """Receive heartbeat, reset countdown timer
-
-        Args:
-            heartbeat_time (datetime.datetime): received heartbeat time
-        """
+        """Receive heartbeat, reset countdown timer"""
         self.logger.debug(
             f"Received heartbeat from {msg.dest_host}:{msg.dest_port}, send ACK back"
         )
@@ -332,6 +326,7 @@ class LogReplication(BaseNode, ABC):
 
     The overall concept is similar to the two-phase commit (2PC) protocol.
     """
+
     def __init__(self):
         # append entries (log replication)
         self.local_entry_queue: Queue[Tuple[Message, Callable]] = Queue()
@@ -378,7 +373,7 @@ class LogReplication(BaseNode, ABC):
             self.entry_ack_nodes += 1
 
         # check majority
-        if self.entry_ack_nodes > self.majority:
+        if self.entry_ack_nodes > self.majority and not self.sent_entry_queue.empty():
             self.logger.info(f"Majority {MessageTypes.ACK.name}, append entries")
             while not self.sent_entry_queue.empty():
                 msg, callback = self.sent_entry_queue.get()
@@ -412,6 +407,7 @@ class DynamicMembership(BaseNode, ABC):
             2. A node closes the socket, resulting in a `refuse to connect` from the node.
         In either case, the leader updates the cluster information and sends it to all nodes in the cluster.
     """
+
     def __init__(self):
         pass
 
@@ -489,7 +485,7 @@ class DynamicMembership(BaseNode, ABC):
         raise Exception("Please override this method")
 
 
-class RaftNode(LeaderElection, LogReplication, DynamicMembership):
+class RaftNode(LeaderElection, LogReplication, DynamicMembership, ABC):
     def __init__(
         self,
         host: str,
@@ -508,9 +504,6 @@ class RaftNode(LeaderElection, LogReplication, DynamicMembership):
         msg: Message,
     ):
         """Receive heartbeat, reset countdown timer
-
-        Args:
-            heartbeat_time (datetime.datetime): received heartbeat time
         """
         self.logger.debug(
             f"Received heartbeat from {msg.dest_host}:{msg.dest_port}, send ACK back"

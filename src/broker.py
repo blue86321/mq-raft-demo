@@ -2,9 +2,9 @@ import logging
 import socket
 from threading import Thread
 from typing import Dict, List, Set, Tuple
-from raft import RaftNode
+from src.raft import RaftNode
 
-from utils import BROKER_HOST, BROKER_PORT, Message, MessageTypes
+from src.utils import BROKER_HOST, BROKER_PORT, Message, MessageTypes
 
 
 class Broker(RaftNode):
@@ -130,6 +130,8 @@ class Broker(RaftNode):
     def run(self) -> None:
         """Start the broker and listen for client connections"""
         self.logger.info(f"Running on {self.host}:{self.port}")
+        # reuse to avoid OSError: [Errno 48] Address already in use
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen(self.backlog)
 

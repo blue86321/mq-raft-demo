@@ -1,9 +1,9 @@
 import logging
 import time
 
-from broker import Broker
-from publisher import Publisher
-from subscriber import Subscriber
+from src.broker import Broker
+from src.publisher import Publisher
+from src.subscriber import Subscriber
 
 logging.basicConfig(
     level=logging.INFO,
