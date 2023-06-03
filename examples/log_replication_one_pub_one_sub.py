@@ -2,10 +2,10 @@ import logging
 import time
 from typing import List
 
-from broker import Broker
-from publisher import Publisher
-from utils import BROKER_HOST, BROKER_PORT, SUBSCRIBER_PORT
-from subscriber import Subscriber
+from src.broker import Broker
+from src.publisher import Publisher
+from src.utils import BROKER_HOST, BROKER_PORT
+from src.subscriber import Subscriber
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,15 +40,11 @@ def main():
     time.sleep(2.5)
 
     topic = "topic1"
+    print("\n\n==================== Subscribe to Node 1 ====================")
     # subscriber
-    subscribers = [
-        Subscriber(*host_ips[0]),
-        Subscriber(*host_ips[1], port=SUBSCRIBER_PORT + 5),
-    ]
-    for idx, sub in enumerate(subscribers):
-        print(f"\n\n==================== Subscribe to Node {idx + 1} ====================")
-        sub.run()
-        sub.subscribe(topic)
+    subscriber = Subscriber(*host_ips[0])
+    subscriber.run()
+    subscriber.subscribe(topic)
     time.sleep(1)
 
     print("\n\n==================== Publish to Node 2 ====================")
@@ -59,7 +55,7 @@ def main():
 
     print("\n\n==================== Unsubscribe and Publish ====================")
     # unsubscribe
-    subscribers[0].unsubscribe(topic)
+    subscriber.unsubscribe(topic)
     print("\n\n==================== Publish (Temporary inconsistent) ====================")
     publisher.publish(topic, "Hello, too fast")
     time.sleep(0.5)
@@ -68,8 +64,7 @@ def main():
     time.sleep(1)
 
     # stop
-    for sub in subscribers:
-        sub.stop()
+    subscriber.stop()
     for broker in brokers:
         broker.stop()
 

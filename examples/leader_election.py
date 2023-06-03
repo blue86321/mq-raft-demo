@@ -2,8 +2,8 @@ import logging
 import time
 from typing import List
 
-from broker import Broker
-from utils import BROKER_HOST, BROKER_PORT
+from src.broker import Broker
+from src.utils import BROKER_HOST, BROKER_PORT
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -42,7 +42,11 @@ def run(
 
     for broker in brokers:
         broker.run()
-    time.sleep(2)
+    
+    if same_election_timeout:
+        time.sleep(2)
+    else:
+        time.sleep(1)
 
     for broker in brokers:
         broker.stop()

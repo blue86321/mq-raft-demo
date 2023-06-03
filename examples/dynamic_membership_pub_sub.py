@@ -2,10 +2,10 @@ import logging
 import time
 from typing import List
 
-from broker import Broker
-from publisher import Publisher
-from utils import BROKER_HOST, BROKER_PORT
-from subscriber import Subscriber
+from src.broker import Broker
+from src.publisher import Publisher
+from src.utils import BROKER_HOST, BROKER_PORT
+from src.subscriber import Subscriber
 
 logging.basicConfig(
     level=logging.INFO,
