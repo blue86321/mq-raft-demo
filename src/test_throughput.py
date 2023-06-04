@@ -9,8 +9,13 @@ from utils import BROKER_HOST, BROKER_PORT
 
 
 def start_broker(host, port, peers=None, join_dest=None):
+    global stop_flag
     broker = Broker(host=host, port=port, peers=peers, join_dest=join_dest)
     broker.run()
+    if stop_flag:
+        time.sleep(2)
+        broker.stop()
+
 
 
 def measure_throughput(duration):
@@ -37,24 +42,18 @@ if __name__ == "__main__":
     # Define the host IPs and ports for the brokers
     host_ips_number=10
     host_ips=[]
+    broker_threads = []
     for i in range(host_ips_number):
         host_ips.append((BROKER_HOST,BROKER_PORT+i))
-    # host_ips = [(BROKER_HOST, BROKER_PORT), (BROKER_HOST, BROKER_PORT + 1),(BROKER_HOST, BROKER_PORT + 2),(BROKER_HOST, BROKER_PORT + 3),(BROKER_HOST, BROKER_PORT + 4),(BROKER_HOST, BROKER_PORT+10), (BROKER_HOST, BROKER_PORT + 11),(BROKER_HOST, BROKER_PORT + 12),(BROKER_HOST, BROKER_PORT + 13),(BROKER_HOST, BROKER_PORT + 14)]
-
-    # Start the brokers in separate threads
-    broker_threads = []
-    stop_flag = False  # Flag to indicate when to stop the threads
-
-    for i, (host, port) in enumerate(host_ips):
         if i == 0:
             # First broker joins the cluster without specifying peers
-            thread = Thread(target=start_broker, args=(host, port))
+            thread = Thread(target=start_broker, args=(BROKER_HOST, BROKER_PORT+i))
         else:
             # Other brokers join the cluster by specifying the previous broker as the peer
             thread = Thread(
                 target=start_broker,
-                args=(host, port),
-                kwargs={"peers": [host_ips[i-1]]},
+                args=(BROKER_HOST, BROKER_PORT+i),
+                kwargs={"peers": host_ips},
             )
         thread.start()
         broker_threads.append(thread)
@@ -68,7 +67,7 @@ if __name__ == "__main__":
 
     # Measure throughput for 5 seconds
     measurement_duration = 5
-    throughput_thread = Thread(target=measure_throughput, args=(measurement_duration,))
+    throughput_thread = Thread(target=measure_throughput, args=(measurement_duration))
     throughput_thread.start()
 
     # Publish messages for the specified duration
