@@ -149,6 +149,39 @@ python examples/leader_election.py
 ```
 
 
+#### Fault Tolerance
+```shell
+python examples/fault_tolerance.py
+```
+
+<img width="700" src="./imgs/DemoFaultTolerance.jpg">
+
+
+```log
+==================== Broker ====================
+2023-06-02 23:39:15 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
+2023-06-02 23:39:15 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
+2023-06-02 23:39:15 [Broker 8002 FOLLOWER] INFO: Running on localhost:8002
+2023-06-02 23:39:16 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
+2023-06-02 23:39:16 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
+2023-06-02 23:39:16 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
+2023-06-02 23:39:16 [Broker 8000 LEADER] INFO: New leader localhost:8000
+
+
+==================== Leader Fail ====================
+2023-06-02 23:39:17 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
+2023-06-02 23:39:17 [Broker 8001 CANDIDATE] INFO: Node leave the cluster: localhost:8000
+2023-06-02 23:39:17 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8001, term: 2
+2023-06-02 23:39:17 [Broker 8001 LEADER] INFO: New leader localhost:8001
+
+
+==================== Another Leader Fail ====================
+2023-06-02 23:39:19 [Broker 8002 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 3
+2023-06-02 23:39:19 [Broker 8002 CANDIDATE] INFO: Node leave the cluster: localhost:8001
+2023-06-02 23:39:19 [Broker 8002 LEADER] INFO: New leader localhost:8002
+```
+
+
 #### Log Replication
 
 ##### One Publisher One Subscriber
@@ -271,39 +304,8 @@ python examples/log_replication_one_pub_two_sub.py
 2023-06-02 22:53:08 [Subscriber 9005] INFO: Received message: `Hello, later` on topic `topic1`
 ```
 
-##### Fault Tolerance
-```shell
-python examples/fault_tolerance.py
-```
 
-<img width="700" src="./imgs/DemoFaultTolerance.jpg">
-
-
-```log
-==================== Broker ====================
-2023-06-02 23:39:15 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
-2023-06-02 23:39:15 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
-2023-06-02 23:39:15 [Broker 8002 FOLLOWER] INFO: Running on localhost:8002
-2023-06-02 23:39:16 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
-2023-06-02 23:39:16 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
-2023-06-02 23:39:16 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
-2023-06-02 23:39:16 [Broker 8000 LEADER] INFO: New leader localhost:8000
-
-
-==================== Leader Fail ====================
-2023-06-02 23:39:17 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
-2023-06-02 23:39:17 [Broker 8001 CANDIDATE] INFO: Node leave the cluster: localhost:8000
-2023-06-02 23:39:17 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8001, term: 2
-2023-06-02 23:39:17 [Broker 8001 LEADER] INFO: New leader localhost:8001
-
-
-==================== Another Leader Fail ====================
-2023-06-02 23:39:19 [Broker 8002 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 3
-2023-06-02 23:39:19 [Broker 8002 CANDIDATE] INFO: Node leave the cluster: localhost:8001
-2023-06-02 23:39:19 [Broker 8002 LEADER] INFO: New leader localhost:8002
-```
-
-##### Dynamic Membership
+#### Dynamic Membership
 ```shell
 python examples/dynamic_membership_pub_sub.py
 ```
@@ -348,6 +350,7 @@ python examples/dynamic_membership_pub_sub.py
 2023-06-02 22:54:47 [Broker 8000 LEADER] INFO: Node leave the cluster: localhost:8006
 ```
 
+
 ## Limitations
 ### Cluster Node Temporarily Unavailable
 - If a node is temporarily unavailable and gets kicked from the cluster, there is no mechanism to gracefully re-join the cluster.
@@ -358,3 +361,20 @@ python examples/dynamic_membership_pub_sub.py
 - Implementing a message cache mechanism in a cluster is not easy. The challenge lies in notifying all nodes about the cached messages.
   - When a publish message fails to deliver, we need to forward the failed message to the leader and then notify all nodes to update.
   - When a cached message is re-published, we need to delete the cached message and let the leader notify all nodes to update.
+
+### Sharding
+- The system did not implement sharding in the cluster.
+- Sharding will partition data into groups and each group will only hold some groups instead of all.
+- Sharding can alleviate space limitation and make the system more scalable.
+
+<img width="800" src="./imgs/Sharding.jpg">
+
+
+### Dedicated Master Node
+- The system did not implement dedicated master node.
+- In our system, leader will be a bottleneck since it handles not only heartbeats but also requests like publish, subscribe, and unsubscribe.
+- A dedicated master node can alleviate this traffic, which only coordinates cluster nodes and does not handle application requests or store data.
+- This approach can alleviate the traffic and resolve the leader bottleneck issues.
+- However, the dedicated master node will suffer from single-point-of-failure, so we need a cluster for master nodes.
+
+<img width="800" src="./imgs/DedicatedMasterNode.jpg">
