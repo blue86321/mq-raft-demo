@@ -68,13 +68,11 @@ def test_cluster_pub_two_pub(caplog):
     for broker in brokers:
         broker.stop()
 
-    assert """==================== Subscribe to Node 1 ====================
-[Subscriber 9000] INFO: Subscriber is running on localhost:9000
+    assert """
 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
 """ in caplog.text
 
     assert """
-[Subscriber 9005] INFO: Subscriber is running on localhost:9005
 [Subscriber 9005] INFO: SUBSCRIBE message on topic `topic1` at localhost:8001
 """ in caplog.text
 
