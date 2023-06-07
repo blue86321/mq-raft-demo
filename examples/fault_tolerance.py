@@ -3,6 +3,7 @@ import time
 from typing import List
 
 from src.broker import Broker
+from src.cluster_manager import ClusterManager
 from src.utils import BROKER_HOST, BROKER_PORT
 
 logging.basicConfig(
@@ -32,18 +33,20 @@ def main():
         host=host_ips[1][0],
         port=host_ips[1][1],
         peers=[host_ips[0], host_ips[2]],
-        election_timeout=1,
+        election_timeout=0.8,
     )
     brokers.append(broker2)
     broker3 = Broker(
         host=host_ips[2][0],
         port=host_ips[2][1],
         peers=[host_ips[0], host_ips[1]],
-        election_timeout=1.5,
+        election_timeout=1.2,
     )
     brokers.append(broker3)
 
     print("\n\n==================== Broker ====================")
+    cluster = ClusterManager()
+    cluster.run()
     for broker in brokers:
         broker.run()
     time.sleep(1)
@@ -57,6 +60,7 @@ def main():
     time.sleep(2)
 
     broker3.stop()
+    cluster.stop()
 
 
 if __name__ == "__main__":
