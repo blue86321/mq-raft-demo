@@ -81,7 +81,7 @@ def test_cluster_pub_one_pub(caplog):
 [Broker 8000 LEADER] INFO: Majority ACK, append entries
 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
-[Broker 8001 FOLLOWER] INFO: Received COMMIT, persistent data
+[Broker 8001 FOLLOWER] INFO: Received LEADER_COMMIT, persist data
 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
 [root] INFO: 
 

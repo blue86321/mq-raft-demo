@@ -50,7 +50,7 @@ class BaseNode(ABC):
         pass
     
     @abstractmethod
-    def get_commit_msg(self) -> Message:
+    def get_leader_commit(self) -> Message:
         """`LogReplication` will override method for `LeaderElection` to use"""
         pass
 
@@ -213,7 +213,7 @@ class LeaderElection(BaseNode, ABC):
         while not self.stopped and self.state == NodeState.LEADER:
             with self.lock:
                 self.entry_ack_nodes = 1
-                nested_msg = self.get_commit_msg()
+                nested_msg = self.get_leader_commit()
                 if not nested_msg:
                     nested_msg = self.get_append_entries_for_heartbeat()
                 msg = Message(
@@ -342,17 +342,17 @@ class LogReplication(BaseNode, ABC):
         self.entry_ack_nodes = 0
         # buffer queue for follower to keep entries
         self.buffer_queue: Queue[Message] = Queue()
-        self._commit_msg = None
+        self._leader_commit = None
 
-    def get_commit_msg(self):
+    def get_leader_commit(self):
         """Get commit msg to send to all follower nodes that the `append_entries` can be flushed into disk"""
-        ret = self._commit_msg
-        self._commit_msg = None
+        ret = self._leader_commit
+        self._leader_commit = None
         return ret
     
-    def set_commit_msg(self):
+    def set_leader_commit(self):
         with self.lock:
-            self._commit_msg = Message(MessageTypes.COMMIT)
+            self._leader_commit = Message(MessageTypes.LEADER_COMMIT)
 
     @abstractmethod
     def handle_append_entries(self, entry: Message):
@@ -372,13 +372,13 @@ class LogReplication(BaseNode, ABC):
     def on_receive_heartbeat(self, msg: Message):
         """Append entries to local when receiving a heartbeat"""
         if msg.nested_msg:
-            if msg.nested_msg.type == MessageTypes.COMMIT:
-                self.logger.info(f"Received {msg.nested_msg.type.name}, persistent data")
+            if msg.nested_msg.type == MessageTypes.LEADER_COMMIT:
+                self.logger.info(f"Received {msg.nested_msg.type.name}, persist data")
                 while not self.buffer_queue.empty():
                     # confirmation received, empty buffer
                     self.handle_append_entries(self.buffer_queue.get())
             else:
-                # store in buffer, wait for `COMMIT` as a confirmation
+                # store in buffer, wait for `LEADER_COMMIT` as a confirmation
                 # similar to 2PC protocol
                 self.logger.info("Received append_entries, store in buffer")
                 self.buffer_queue.put(msg.nested_msg)
@@ -401,7 +401,7 @@ class LogReplication(BaseNode, ABC):
                 msg, callback = self.sent_entry_queue.get()
                 if callback:
                     callback(msg)
-            self.set_commit_msg()
+            self.set_leader_commit()
 
     def setup_append_entries(self, append_entries: Message, callback: Callable):
         """Setup append_entries. This message will send to peers in the next heartbeat"""
