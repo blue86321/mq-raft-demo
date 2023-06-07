@@ -48,6 +48,11 @@ class BaseNode(ABC):
     def get_append_entries_for_heartbeat(self) -> Message:
         """`LogReplication` will override method for `LeaderElection` to use"""
         pass
+    
+    @abstractmethod
+    def get_commit_msg(self) -> Message:
+        """`LogReplication` will override method for `LeaderElection` to use"""
+        pass
 
     @abstractmethod
     def check_majority_append_entries(self, msg: Message, self_check=False):
@@ -208,7 +213,9 @@ class LeaderElection(BaseNode, ABC):
         while not self.stopped and self.state == NodeState.LEADER:
             with self.lock:
                 self.entry_ack_nodes = 1
-                nested_msg = self.get_append_entries_for_heartbeat()
+                nested_msg = self.get_commit_msg()
+                if not nested_msg:
+                    nested_msg = self.get_append_entries_for_heartbeat()
                 msg = Message(
                     MessageTypes.HEARTBEAT,
                     dest_host=self.host,
@@ -219,12 +226,12 @@ class LeaderElection(BaseNode, ABC):
                 )
                 for peer_host, peer_port in self.peers:
                     Thread(
-                        target=self.__deal_with_one_heartbeat,
+                        target=self.__send_one_heartbeat,
                         args=(peer_host, peer_port, msg),
                     ).start()
             time.sleep(self.HEARTBEAT_INTERVAL)
 
-    def __deal_with_one_heartbeat(
+    def __send_one_heartbeat(
         self, peer_host: str, peer_port: int, msg: Message
     ) -> None:
         """Send heartbeat to one peer
@@ -257,6 +264,7 @@ class LeaderElection(BaseNode, ABC):
             finally:
                 # check append_entries no matter ACK or remove nodes
                 if msg.nested_msg:
+                # if msg.nested_msg and msg.nested_msg.type != MessageTypes.COMMIT:
                     self.check_majority_append_entries(msg)
 
     def handle_request_to_vote(self, client_socket: socket.socket, msg: Message):
@@ -334,6 +342,17 @@ class LogReplication(BaseNode, ABC):
         self.entry_ack_nodes = 0
         # buffer queue for follower to keep entries
         self.buffer_queue: Queue[Message] = Queue()
+        self._commit_msg = None
+
+    def get_commit_msg(self):
+        """Get commit msg to send to all follower nodes that the `append_entries` can be flushed into disk"""
+        ret = self._commit_msg
+        self._commit_msg = None
+        return ret
+    
+    def set_commit_msg(self):
+        with self.lock:
+            self._commit_msg = Message(MessageTypes.COMMIT)
 
     @abstractmethod
     def handle_append_entries(self, entry: Message):
@@ -352,14 +371,17 @@ class LogReplication(BaseNode, ABC):
 
     def on_receive_heartbeat(self, msg: Message):
         """Append entries to local when receiving a heartbeat"""
-        while not self.buffer_queue.empty():
-            # confirmation heartbeat received, empty buffer
-            self.handle_append_entries(self.buffer_queue.get())
         if msg.nested_msg:
-            # store in buffer, wait for next `heartbeat` as a confirmation
-            # similar to 2PC protocol
-            self.logger.info("Received append_entries, store in buffer")
-            self.buffer_queue.put(msg.nested_msg)
+            if msg.nested_msg.type == MessageTypes.COMMIT:
+                self.logger.info(f"Received {msg.nested_msg.type.name}, persistent data")
+                while not self.buffer_queue.empty():
+                    # confirmation received, empty buffer
+                    self.handle_append_entries(self.buffer_queue.get())
+            else:
+                # store in buffer, wait for `COMMIT` as a confirmation
+                # similar to 2PC protocol
+                self.logger.info("Received append_entries, store in buffer")
+                self.buffer_queue.put(msg.nested_msg)
 
     def check_majority_append_entries(self, msg: Message, self_check=False):
         """For leader, if majority of peers ACK, append entries on leader node
@@ -379,6 +401,7 @@ class LogReplication(BaseNode, ABC):
                 msg, callback = self.sent_entry_queue.get()
                 if callback:
                     callback(msg)
+            self.set_commit_msg()
 
     def setup_append_entries(self, append_entries: Message, callback: Callable):
         """Setup append_entries. This message will send to peers in the next heartbeat"""
