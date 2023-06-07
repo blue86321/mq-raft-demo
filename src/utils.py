@@ -26,6 +26,7 @@ class MessageTypes(str, Enum):
     VOTE = "vote"
     JOIN_CLUSTER = "join_cluster"
     SYNC_DATA = "sync_data"
+    LEADER_COMMIT = "leader_commit"
 
 
 class Message:

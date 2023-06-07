@@ -112,11 +112,12 @@ def test_leader_election():
         broker.run()
     time.sleep(1)
 
-    assert broker1.is_leader
-    assert not broker2.is_leader
-
-    for broker in brokers:
-        broker.stop()
+    try:
+        assert broker1.is_leader
+        assert not broker2.is_leader
+    finally:
+        for broker in brokers:
+            broker.stop()
 
 
 def test_forward_leader():
@@ -142,25 +143,25 @@ def test_forward_leader():
         broker.run()
     time.sleep(1)
 
-    assert broker1.is_leader
-    assert not broker2.is_leader
-
-    # subscriber
-    topic = "topic1"
     subscriber = Subscriber(broker_host=broker2.host, broker_port=broker2.port)
-    subscriber.run()
-    subscriber.subscribe(topic)
-    time.sleep(1)
+    try:
+        assert broker1.is_leader
+        assert not broker2.is_leader
 
-    assert (subscriber.host, subscriber.port) in broker1.topic_subscribers.get(topic)
+        # subscriber
+        topic = "topic1"
+        subscriber.run()
+        subscriber.subscribe(topic)
+        time.sleep(1)
 
-    for broker in brokers:
-        broker.stop()
-    subscriber.stop()
+        assert (subscriber.host, subscriber.port) in broker1.topic_subscribers.get(topic)
+    finally:
+        for broker in brokers:
+            broker.stop()
+        subscriber.stop()
 
 
-def test_fault_tolerance(caplog):
-    caplog.set_level(logging.INFO)
+def test_fault_tolerance():
     # broker
     host_ips = [
         (BROKER_HOST, BROKER_PORT),
@@ -195,25 +196,28 @@ def test_fault_tolerance(caplog):
         broker.run()
     time.sleep(1)
 
-    assert broker1.is_leader
-    assert not broker2.is_leader
-    assert not broker3.is_leader
+    try:
+        assert broker1.is_leader
+        assert not broker2.is_leader
+        assert not broker3.is_leader
 
-    # leader fail
-    broker1.stop()
-    time.sleep(1)
+        # leader fail
+        broker1.stop()
+        time.sleep(1)
 
-    assert broker2.is_leader
-    assert not broker3.is_leader
+        assert broker2.is_leader
+        assert not broker3.is_leader
 
-    # leader fail
-    broker2.stop()
-    time.sleep(2)
+        # leader fail
+        broker2.stop()
+        time.sleep(2)
 
-    print(caplog.text)
-
-    assert broker3.is_leader
-    broker3.stop()
+        assert broker3.is_leader
+        broker3.stop()
+    finally:
+        broker1.stop()
+        broker2.stop()
+        broker3.stop()
 
 
 def test_log_replication():
@@ -246,16 +250,17 @@ def test_log_replication():
     subscriber.subscribe(topic)
     time.sleep(0.5)
 
-    assert broker1.is_leader
-    assert not broker2.is_leader
+    try:
+        assert broker1.is_leader
+        assert not broker2.is_leader
 
-    assert (subscriber.host, subscriber.port) in broker1.sync_data.get(topic)
-    assert broker1.sync_data == broker2.sync_data
-
-    # stop
-    for broker in brokers:
-        broker.stop()
-    subscriber.stop()
+        assert (subscriber.host, subscriber.port) in broker1.sync_data.get(topic)
+        assert broker1.sync_data == broker2.sync_data
+    finally:
+        # stop
+        for broker in brokers:
+            broker.stop()
+        subscriber.stop()
 
 
 def test_dynamic_membership():
@@ -266,7 +271,7 @@ def test_dynamic_membership():
         port=host_ips[0][1],
     )
     broker1.run()
-    time.sleep(0.5)
+    time.sleep(1)
 
     # subscriber
     topic = "topic1"
@@ -284,18 +289,20 @@ def test_dynamic_membership():
     broker2.run()
     time.sleep(1.5)
 
-    assert broker1.is_leader
-    assert (broker2.host, broker2.port) in broker1.peers
-    assert (broker1.host, broker1.port) in broker2.peers
+    try:
+        assert broker1.is_leader
+        assert (broker2.host, broker2.port) in broker1.peers
+        assert (broker1.host, broker1.port) in broker2.peers
 
-    assert (subscriber.host, subscriber.port) in broker1.sync_data.get(topic)
-    assert broker1.sync_data == broker2.sync_data
+        assert (subscriber.host, subscriber.port) in broker1.sync_data.get(topic)
+        assert broker1.sync_data == broker2.sync_data
 
-    # node leave
-    broker2.stop()
-    time.sleep(0.5)
-    assert (broker2.host, broker2.port) not in broker1.peers
-
-    # stop
-    broker1.stop()
-    subscriber.stop()
+        # node leave
+        broker2.stop()
+        time.sleep(0.5)
+        assert (broker2.host, broker2.port) not in broker1.peers
+    finally:
+        # stop
+        broker2.stop()
+        broker1.stop()
+        subscriber.stop()

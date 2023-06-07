@@ -20,8 +20,10 @@ In this demo, the following mechanisms are implemented: leader election, log rep
 ### Log Replication
 - An update request (Subscribe/Unsubscribe) is forwarded to the leader.
 - The leader sends `append entries` messages to all followers along with heartbeats.
-- When the majority of followers acknowledge (`ACK`) the `append entries` message, the leader appends the entries locally.
-- Followers update their local entries upon receiving the next heartbeat after the `append entries` message.
+- When the majority of followers acknowledge (`ACK`) the `append entries` message, the leader appends the entries locally and sends `LEADER_COMMIT` to all followers.
+- Followers update their local entries upon receiving `LEADER_COMMIT` from the leader.
+
+Note: The idea is similar to two-phase commit (2PC) protocol.
 
 ### Dynamic Membership
 #### Join
