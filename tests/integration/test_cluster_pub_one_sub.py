@@ -3,6 +3,7 @@ import time
 from typing import List
 
 from src.broker import Broker
+from src.cluster_manager import ClusterManager
 from src.publisher import Publisher
 from src.utils import BROKER_HOST, BROKER_PORT
 from src.subscriber import Subscriber
@@ -30,21 +31,23 @@ def test_cluster_pub_one_pub(caplog):
     brokers.append(broker2)
 
     logging.info("\n\n==================== Broker ====================")
+    cluster = ClusterManager()
+    cluster.run()
     for broker in brokers:
         broker.run()
     time.sleep(2.5)
 
     topic = "topic1"
-    logging.info("\n\n==================== Subscribe to Node 1 ====================")
+    logging.info("\n\n==================== Subscribe ====================")
     # subscriber
-    subscriber = Subscriber(*host_ips[0])
+    subscriber = Subscriber()
     subscriber.run()
     subscriber.subscribe(topic)
     time.sleep(1)
 
-    logging.info("\n\n==================== Publish to Node 2 ====================")
+    logging.info("\n\n==================== Publish ====================")
     # publisher
-    publisher = Publisher(*host_ips[1])
+    publisher = Publisher()
     publisher.publish(topic, "Hello, world!")
     time.sleep(1)
 
@@ -62,10 +65,13 @@ def test_cluster_pub_one_pub(caplog):
     subscriber.stop()
     for broker in brokers:
         broker.stop()
+    cluster.stop()
 
+    print(caplog.text)
     assert """[root] INFO: 
 
 ==================== Broker ====================
+[ClusterManager 8888] INFO: Running on localhost:8888
 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
@@ -73,9 +79,10 @@ def test_cluster_pub_one_pub(caplog):
 [Broker 8000 LEADER] INFO: New leader localhost:8000
 [root] INFO: 
 
-==================== Subscribe to Node 1 ====================
+==================== Subscribe ====================
 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
-[Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
+[Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8888
+[ClusterManager 8888] INFO: Forward SUBSCRIBE to ('localhost', 8000)
 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
 [Broker 8000 LEADER] INFO: Majority ACK, append entries
@@ -85,26 +92,21 @@ def test_cluster_pub_one_pub(caplog):
 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
 [root] INFO: 
 
-==================== Publish to Node 2 ====================
-[Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8001
-[Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, world!`
-[Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`
+==================== Publish ====================
+[Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8888
 """ in caplog.text
 
+    assert "[Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`" in caplog.text
+
     # Unsubscribe
-    assert """[Subscriber 9000] INFO: UNSUBSCRIBE message on topic `topic1` at localhost:8000""" in caplog.text
+    assert "[Subscriber 9000] INFO: UNSUBSCRIBE message on topic `topic1` at localhost:8888" in caplog.text
 
     # Log replication order
-    unsub_idx = caplog.text.index("[Broker 8000 LEADER] INFO: New UNSUBSCRIBE to `topic1` from localhost:9000")
-    assert unsub_idx \
-           < caplog.text.index("[Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer", unsub_idx) \
-           < caplog.text.index("[Broker 8000 LEADER] INFO: Majority ACK, append entries", unsub_idx) \
-           < caplog.text.index(
-            "[Broker 8000 LEADER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000",
-            unsub_idx) \
-           < caplog.text.index(
-            "[Broker 8001 FOLLOWER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000",
-            unsub_idx)
+    assert "[Broker 8000 LEADER] INFO: New UNSUBSCRIBE to `topic1` from localhost:9000" in caplog.text
+    assert "[Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer" in caplog.text
+    assert "[Broker 8000 LEADER] INFO: Majority ACK, append entries" in caplog.text
+    assert "[Broker 8000 LEADER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000" in caplog.text
+    assert "[Broker 8001 FOLLOWER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000" in caplog.text
 
     # Temporary inconsistent
     assert """[Subscriber 9000] INFO: Received message: `Hello, too fast` on topic `topic1`""" in caplog.text

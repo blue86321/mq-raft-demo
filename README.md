@@ -18,7 +18,7 @@ In this demo, the following mechanisms are implemented: leader election, log rep
 - the candidate becomes the new leader when it receives the majority of votes.
 
 ### Log Replication
-- An update request (Subscribe/Unsubscribe) is forwarded to the leader.
+- When the cluster manager receive an update request (Subscribe/Unsubscribe), it forward the request to the leader.
 - The leader sends `append entries` messages to all followers along with heartbeats.
 - When the majority of followers acknowledge (`ACK`) the `append entries` message, the leader appends the entries locally and sends `LEADER_COMMIT` to all followers.
 - Followers update their local entries upon receiving `LEADER_COMMIT` from the leader.
@@ -27,7 +27,7 @@ Note: The idea is similar to two-phase commit (2PC) protocol.
 
 ### Dynamic Membership
 #### Join
-- When a new node wants to join, it sends a `JOIN_CLUSTER` message to one node in the cluster.
+- When a new node wants to join, it sends a `JOIN_CLUSTER` message to the cluster manager.
 - The `JOIN_CLUSTER` message is forwarded to the leader. The leader then sends a `SYNC_DATA` message to the new node, allowing the new node to obtain all necessary data (e.g., subscribed topics).
 - After updating its data, the new node sends an `ACK` to the leader and starts the election timeout mechanism.
 - The leader adds the new node to the cluster information and send the information to all followers with each heartbeat.
@@ -52,7 +52,7 @@ pip install .
 ### Exit Environment
 ```shell
 deactivate
-rm -rf venv build mq_raft_demo.egg-info .pytest_cache
+rm -rf venv build mq_raft_demo.egg-info .pytest_cache tests/.pytest_cache
 ```
 
 
@@ -65,16 +65,16 @@ pytest
 ```
 =========== test session starts ============
 configfile: pytest.ini
-collected 15 items
+collected 13 items
 
-tests/integration/test_basic.py .                               [  6%]
-tests/integration/test_cluster_dynamic_membership_pub_sub.py .  [ 13%]
-tests/integration/test_cluster_pub_one_sub.py .                 [ 20%]
-tests/integration/test_cluster_pub_two_sub.py .                 [ 26%]
-tests/unit/test_borker.py ........                              [ 80%]
-tests/unit/test_publish.py .                                    [ 86%]
+tests/integration/test_basic.py .                               [  7%]
+tests/integration/test_cluster_dynamic_membership_pub_sub.py .  [ 15%]
+tests/integration/test_cluster_pub_one_sub.py .                 [ 23%]
+tests/integration/test_cluster_pub_two_sub.py .                 [ 30%]
+tests/unit/test_borker.py ......                                [ 76%]
+tests/unit/test_publish.py .                                    [ 84%]
 tests/unit/test_subscribe.py ..                                 [100%]
-=========== 15 passed in 42.31s ============
+=========== 13 passed in 38.78s ============
 ```
 
 
@@ -90,24 +90,27 @@ python examples/basic_single_node.py
 
 ```log
 ==================== Broker ====================
-2023-06-02 22:49:41 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
-2023-06-02 22:49:42 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
-2023-06-02 22:49:42 [Broker 8000 LEADER] INFO: New leader localhost:8000
+2023-06-07 16:15:41 [ClusterManager 8888] INFO: Running on localhost:8888
+2023-06-07 16:15:41 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
+2023-06-07 16:15:42 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
+2023-06-07 16:15:42 [Broker 8000 LEADER] INFO: New leader localhost:8000
 
 
 ==================== Subscribe ====================
-2023-06-02 22:49:42 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
-2023-06-02 22:49:42 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
-2023-06-02 22:49:42 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
-2023-06-02 22:49:42 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-2023-06-02 22:49:42 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
-2023-06-02 22:49:42 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
+2023-06-07 16:15:42 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
+2023-06-07 16:15:42 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8888
+2023-06-07 16:15:42 [ClusterManager 8888] INFO: Forward SUBSCRIBE to ('localhost', 8000)
+2023-06-07 16:15:42 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
+2023-06-07 16:15:42 [Broker 8000 LEADER] INFO: Majority ACK, append entries
+2023-06-07 16:15:42 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
+2023-06-07 16:15:42 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
 
 
 ==================== Publish ====================
-2023-06-02 22:49:43 [Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8000
-2023-06-02 22:49:43 [Broker 8000 LEADER] INFO: New publish `topic1`: `Hello, world!`
-2023-06-02 22:49:43 [Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`
+2023-06-07 16:15:43 [Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8888
+2023-06-07 16:15:43 [ClusterManager 8888] INFO: Forward PUBLISH to ('localhost', 8000)
+2023-06-07 16:15:43 [Broker 8000 LEADER] INFO: New publish `topic1`: `Hello, world!`
+2023-06-07 16:15:43 [Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`
 ```
 
 ### Broker Cluster
@@ -122,32 +125,38 @@ python examples/leader_election.py
 
 ```log
 ==================== Same Election Timeout ====================
-2023-06-02 22:57:06 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
-2023-06-02 22:57:06 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
-2023-06-02 22:57:07 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
-2023-06-02 22:57:07 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
-2023-06-02 22:57:07 [Broker 8000 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8001
-2023-06-02 22:57:07 [Broker 8001 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8000
-2023-06-02 22:57:08 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
-2023-06-02 22:57:08 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
-2023-06-02 22:57:08 [Broker 8000 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8001
-2023-06-02 22:57:08 [Broker 8001 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8000
+2023-06-07 16:16:08 [ClusterManager 8888] INFO: Running on localhost:8888
+2023-06-07 16:16:08 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
+2023-06-07 16:16:08 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
+2023-06-07 16:16:08 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
+2023-06-07 16:16:08 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
+2023-06-07 16:16:08 [Broker 8000 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8001
+2023-06-07 16:16:08 [Broker 8001 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8000
+2023-06-07 16:16:09 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
+2023-06-07 16:16:09 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
+2023-06-07 16:16:09 [Broker 8000 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8001
+2023-06-07 16:16:09 [Broker 8001 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8000
+
 
 
 ==================== Different Election Timeout ====================
-2023-06-02 22:57:08 [Broker 8100 FOLLOWER] INFO: Running on localhost:8100
-2023-06-02 22:57:08 [Broker 8101 FOLLOWER] INFO: Running on localhost:8101
-2023-06-02 22:57:08 [Broker 8100 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
-2023-06-02 22:57:08 [Broker 8100 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8101
-2023-06-02 22:57:08 [Broker 8101 FOLLOWER] INFO: Vote to leader localhost:8100, term: 1
-2023-06-02 22:57:08 [Broker 8100 CANDIDATE] DEBUG: Be voted by localhost:8101
-2023-06-02 22:57:08 [Broker 8100 LEADER] INFO: New leader localhost:8100
-2023-06-02 22:57:08 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8101
-2023-06-02 22:57:08 [Broker 8101 FOLLOWER] DEBUG: Received heartbeat from localhost:8100, send ACK back
-2023-06-02 22:57:08 [Broker 8100 LEADER] DEBUG: Received ACK from localhost:8101
-2023-06-02 22:57:08 [Broker 8101 FOLLOWER] DEBUG: Received heartbeat from localhost:8100, send ACK back
-2023-06-02 22:57:09 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8101
-2023-06-02 22:57:09 [Broker 8101 FOLLOWER] DEBUG: Received heartbeat from localhost:8100, send ACK back
+2023-06-07 16:16:10 [ClusterManager 8888] INFO: Running on localhost:8888
+2023-06-07 16:16:10 [Broker 8100 FOLLOWER] INFO: Running on localhost:8100
+2023-06-07 16:16:10 [Broker 8101 FOLLOWER] INFO: Running on localhost:8101
+2023-06-07 16:16:10 [Broker 8100 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
+2023-06-07 16:16:10 [Broker 8100 CANDIDATE] DEBUG: Send REQUEST_TO_VOTE to localhost:8101
+2023-06-07 16:16:10 [Broker 8101 FOLLOWER] INFO: Vote to leader localhost:8100, term: 1
+2023-06-07 16:16:10 [Broker 8100 CANDIDATE] DEBUG: Be voted by localhost:8101
+2023-06-07 16:16:10 [Broker 8100 LEADER] INFO: New leader localhost:8100
+2023-06-07 16:16:10 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8888
+2023-06-07 16:16:10 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8101
+2023-06-07 16:16:10 [Broker 8101 FOLLOWER] DEBUG: Received heartbeat from localhost:8100, send ACK back
+2023-06-07 16:16:10 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8101
+2023-06-07 16:16:10 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8888
+2023-06-07 16:16:10 [Broker 8101 FOLLOWER] DEBUG: Received heartbeat from localhost:8100, send ACK back
+2023-06-07 16:16:10 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8101
+2023-06-07 16:16:10 [Broker 8100 LEADER] DEBUG: Send heartbeat to peer localhost:8888
+2023-06-07 16:16:10 [Broker 8101 FOLLOWER] DEBUG: Received heartbeat from localhost:8100, send ACK back
 ```
 
 
@@ -161,26 +170,28 @@ python examples/fault_tolerance.py
 
 ```log
 ==================== Broker ====================
-2023-06-02 23:39:15 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
-2023-06-02 23:39:15 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
-2023-06-02 23:39:15 [Broker 8002 FOLLOWER] INFO: Running on localhost:8002
-2023-06-02 23:39:16 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
-2023-06-02 23:39:16 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
-2023-06-02 23:39:16 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
-2023-06-02 23:39:16 [Broker 8000 LEADER] INFO: New leader localhost:8000
+2023-06-07 16:23:45 [ClusterManager 8888] INFO: Running on localhost:8888
+2023-06-07 16:23:45 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
+2023-06-07 16:23:45 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
+2023-06-07 16:23:45 [Broker 8002 FOLLOWER] INFO: Running on localhost:8002
+2023-06-07 16:23:46 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
+2023-06-07 16:23:46 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
+2023-06-07 16:23:46 [Broker 8000 LEADER] INFO: New leader localhost:8000
+2023-06-07 16:23:46 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
 
 
 ==================== Leader Fail ====================
-2023-06-02 23:39:17 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
-2023-06-02 23:39:17 [Broker 8001 CANDIDATE] INFO: Node leave the cluster: localhost:8000
-2023-06-02 23:39:17 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8001, term: 2
-2023-06-02 23:39:17 [Broker 8001 LEADER] INFO: New leader localhost:8001
+2023-06-07 16:23:47 [Broker 8001 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 2
+2023-06-07 16:23:47 [Broker 8001 CANDIDATE] INFO: Node leave the cluster: localhost:8000
+2023-06-07 16:23:47 [Broker 8002 FOLLOWER] INFO: Vote to leader localhost:8001, term: 2
+2023-06-07 16:23:47 [Broker 8001 LEADER] INFO: New leader localhost:8001
 
 
 ==================== Another Leader Fail ====================
-2023-06-02 23:39:19 [Broker 8002 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 3
-2023-06-02 23:39:19 [Broker 8002 CANDIDATE] INFO: Node leave the cluster: localhost:8001
-2023-06-02 23:39:19 [Broker 8002 LEADER] INFO: New leader localhost:8002
+2023-06-07 16:23:49 [Broker 8002 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 3
+2023-06-07 16:23:49 [Broker 8002 CANDIDATE] INFO: Node leave the cluster: localhost:8001
+2023-06-07 16:23:49 [Broker 8002 LEADER] INFO: New leader localhost:8002
+
 ```
 
 
@@ -188,124 +199,60 @@ python examples/fault_tolerance.py
 
 ##### One Publisher One Subscriber
 ```shell
-python examples/log_replication_one_pub_one_sub.py
+python examples/log_replication_pub_sub.py
 ```
 
 <img width="800" src="./imgs/DemoLogReplication.jpg">
 
 ```log
 ==================== Broker ====================
-2023-06-02 22:52:36 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
-2023-06-02 22:52:36 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
-2023-06-02 22:52:36 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
-2023-06-02 22:52:36 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
-2023-06-02 22:52:36 [Broker 8000 LEADER] INFO: New leader localhost:8000
+2023-06-07 16:29:48 [ClusterManager 8888] INFO: Running on localhost:8888
+2023-06-07 16:29:48 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
+2023-06-07 16:29:48 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
+2023-06-07 16:29:49 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
+2023-06-07 16:29:49 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
+2023-06-07 16:29:49 [Broker 8000 LEADER] INFO: New leader localhost:8000
 
 
-==================== Subscribe to Node 1 ====================
-2023-06-02 22:52:38 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
-2023-06-02 22:52:38 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
-2023-06-02 22:52:38 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
-2023-06-02 22:52:38 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-2023-06-02 22:52:38 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
-2023-06-02 22:52:38 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
-2023-06-02 22:52:38 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
-2023-06-02 22:52:38 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
+==================== Subscribe ====================
+2023-06-07 16:29:51 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
+2023-06-07 16:29:51 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
+2023-06-07 16:29:51 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
+2023-06-07 16:29:51 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
+2023-06-07 16:29:51 [Broker 8000 LEADER] INFO: Majority ACK, append entries
+2023-06-07 16:29:51 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
+2023-06-07 16:29:51 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
+2023-06-07 16:29:51 [Broker 8001 FOLLOWER] INFO: Received LEADER_COMMIT, persist data
+2023-06-07 16:29:51 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
 
 
-==================== Publish to Node 2 ====================
-2023-06-02 22:52:39 [Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8001
-2023-06-02 22:52:39 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, world!`
-2023-06-02 22:52:39 [Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`
-
-
-==================== Unsubscribe and Publish ====================
-2023-06-02 22:52:40 [Subscriber 9000] INFO: UNSUBSCRIBE message on topic `topic1` at localhost:8000
-
-
-==================== Publish (Temporary inconsistent) ====================
-2023-06-02 22:52:40 [Publisher] INFO: Publish to topic `topic1`: `Hello, too fast` at localhost:8001
-2023-06-02 22:52:40 [Broker 8000 LEADER] INFO: New UNSUBSCRIBE to `topic1` from localhost:9000
-2023-06-02 22:52:40 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, too fast`
-2023-06-02 22:52:40 [Subscriber 9000] INFO: Received message: `Hello, too fast` on topic `topic1`
-2023-06-02 22:52:40 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
-2023-06-02 22:52:40 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-2023-06-02 22:52:40 [Broker 8000 LEADER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000
-2023-06-02 22:52:40 [Subscriber 9000] INFO: Received ACK: unsubscribe on topic `topic1`
-2023-06-02 22:52:40 [Broker 8001 FOLLOWER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000
-
-
-==================== Publish Later ====================
-2023-06-02 22:52:41 [Publisher] INFO: Publish to topic `topic1`: `Hello, later` at localhost:8001
-2023-06-02 22:52:41 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, later`
-```
-
-##### One Publisher Two Subscribers
-```shell
-python examples/log_replication_one_pub_two_sub.py
-```
-```log
-==================== Broker ====================
-2023-06-02 22:53:03 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
-2023-06-02 22:53:03 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
-2023-06-02 22:53:03 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
-2023-06-02 22:53:03 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
-2023-06-02 22:53:03 [Broker 8000 LEADER] INFO: New leader localhost:8000
-
-
-==================== Subscribe to Node 1 ====================
-2023-06-02 22:53:05 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
-2023-06-02 22:53:05 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
-2023-06-02 22:53:05 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
-
-
-==================== Subscribe to Node 2 ====================
-2023-06-02 22:53:05 [Subscriber 9005] INFO: Subscriber is running on localhost:9005
-2023-06-02 22:53:05 [Subscriber 9005] INFO: SUBSCRIBE message on topic `topic1` at localhost:8001
-2023-06-02 22:53:05 [Broker 8001 FOLLOWER] INFO: Forward SUBSCRIBE to leader: ('localhost', 8000)
-2023-06-02 22:53:05 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9005
-2023-06-02 22:53:05 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
-2023-06-02 22:53:05 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-2023-06-02 22:53:05 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
-2023-06-02 22:53:05 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
-2023-06-02 22:53:06 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
-2023-06-02 22:53:06 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-2023-06-02 22:53:06 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
-2023-06-02 22:53:06 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9005
-2023-06-02 22:53:06 [Subscriber 9005] INFO: Received ACK: subscribe on topic `topic1`
-2023-06-02 22:53:06 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9005
-
-
-==================== Publish to Node 2 ====================
-2023-06-02 22:53:06 [Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8001
-2023-06-02 22:53:06 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, world!`
-2023-06-02 22:53:06 [Subscriber 9005] INFO: Received message: `Hello, world!` on topic `topic1`
-2023-06-02 22:53:06 [Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`
+==================== Publish ====================
+2023-06-07 16:29:52 [Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8001
+2023-06-07 16:29:52 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, world!`
+2023-06-07 16:29:52 [Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`
 
 
 ==================== Unsubscribe and Publish ====================
-2023-06-02 22:53:07 [Subscriber 9000] INFO: UNSUBSCRIBE message on topic `topic1` at localhost:8000
-2023-06-02 22:53:07 [Broker 8000 LEADER] INFO: New UNSUBSCRIBE to `topic1` from localhost:9000
+2023-06-07 16:29:53 [Subscriber 9000] INFO: UNSUBSCRIBE message on topic `topic1` at localhost:8000
 
 
 ==================== Publish (Temporary inconsistent) ====================
-2023-06-02 22:53:07 [Publisher] INFO: Publish to topic `topic1`: `Hello, too fast` at localhost:8001
-2023-06-02 22:53:07 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, too fast`
-2023-06-02 22:53:07 [Subscriber 9005] INFO: Received message: `Hello, too fast` on topic `topic1`
-2023-06-02 22:53:07 [Subscriber 9000] INFO: Received message: `Hello, too fast` on topic `topic1`
-2023-06-02 22:53:07 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
-2023-06-02 22:53:07 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-2023-06-02 22:53:07 [Broker 8000 LEADER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000
-2023-06-02 22:53:07 [Subscriber 9000] INFO: Received ACK: unsubscribe on topic `topic1`
-2023-06-02 22:53:08 [Broker 8001 FOLLOWER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000
+2023-06-07 16:29:53 [Publisher] INFO: Publish to topic `topic1`: `Hello, too fast` at localhost:8001
+2023-06-07 16:29:53 [Broker 8000 LEADER] INFO: New UNSUBSCRIBE to `topic1` from localhost:9000
+2023-06-07 16:29:53 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, too fast`
+2023-06-07 16:29:53 [Subscriber 9000] INFO: Received message: `Hello, too fast` on topic `topic1`
+2023-06-07 16:29:53 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
+2023-06-07 16:29:53 [Broker 8000 LEADER] INFO: Majority ACK, append entries
+2023-06-07 16:29:53 [Broker 8000 LEADER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000
+2023-06-07 16:29:53 [Subscriber 9000] INFO: Received ACK: unsubscribe on topic `topic1`
+2023-06-07 16:29:53 [Broker 8001 FOLLOWER] INFO: Received LEADER_COMMIT, persist data
+2023-06-07 16:29:53 [Broker 8001 FOLLOWER] INFO: Handle append_entries: UNSUBSCRIBE on topic: `topic1` from localhost:9000
 
 
 ==================== Publish Later ====================
-2023-06-02 22:53:08 [Publisher] INFO: Publish to topic `topic1`: `Hello, later` at localhost:8001
-2023-06-02 22:53:08 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, later`
-2023-06-02 22:53:08 [Subscriber 9005] INFO: Received message: `Hello, later` on topic `topic1`
+2023-06-07 16:29:53 [Publisher] INFO: Publish to topic `topic1`: `Hello, later` at localhost:8001
+2023-06-07 16:29:53 [Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, later`
 ```
-
 
 #### Dynamic Membership
 ```shell
@@ -316,40 +263,45 @@ python examples/dynamic_membership_pub_sub.py
 
 ```log
 ==================== Broker ====================
-2023-06-02 22:54:41 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
-2023-06-02 22:54:41 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
-2023-06-02 22:54:42 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
-2023-06-02 22:54:42 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
-2023-06-02 22:54:42 [Broker 8000 LEADER] INFO: New leader localhost:8000
+2023-06-07 17:17:50 [ClusterManager 8888] INFO: Running on localhost:8888
+2023-06-07 17:17:50 [Broker 8000 FOLLOWER] INFO: Running on localhost:8000
+2023-06-07 17:17:50 [Broker 8001 FOLLOWER] INFO: Running on localhost:8001
+2023-06-07 17:17:50 [Broker 8000 CANDIDATE] INFO: Timeout, sending REQUEST_TO_VOTE, term: 1
+2023-06-07 17:17:50 [Broker 8001 FOLLOWER] INFO: Vote to leader localhost:8000, term: 1
+2023-06-07 17:17:50 [Broker 8000 LEADER] INFO: New leader localhost:8000
 
 
-==================== Subscribe to Node 1 ====================
-2023-06-02 22:54:43 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
-2023-06-02 22:54:43 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
-2023-06-02 22:54:43 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
-2023-06-02 22:54:43 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
-2023-06-02 22:54:43 [Broker 8000 LEADER] INFO: Majority ACK, append entries
-2023-06-02 22:54:43 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
-2023-06-02 22:54:43 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
-2023-06-02 22:54:43 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
+==================== Subscribe ====================
+2023-06-07 17:17:52 [Subscriber 9000] INFO: Subscriber is running on localhost:9000
+2023-06-07 17:17:52 [Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8888
+2023-06-07 17:17:52 [ClusterManager 8888] INFO: Forward SUBSCRIBE to ('localhost', 8000)
+2023-06-07 17:17:52 [Broker 8000 LEADER] INFO: New SUBSCRIBE to `topic1` from localhost:9000
+2023-06-07 17:17:52 [Broker 8001 FOLLOWER] INFO: Received append_entries, store in buffer
+2023-06-07 17:17:52 [Broker 8000 LEADER] INFO: Majority ACK, append entries
+2023-06-07 17:17:52 [Broker 8000 LEADER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
+2023-06-07 17:17:52 [Subscriber 9000] INFO: Received ACK: subscribe on topic `topic1`
+2023-06-07 17:17:52 [Broker 8001 FOLLOWER] INFO: Received LEADER_COMMIT, persist data
+2023-06-07 17:17:52 [Broker 8001 FOLLOWER] INFO: Handle append_entries: SUBSCRIBE on topic: `topic1` from localhost:9000
 
 
 ==================== Node Join ====================
-2023-06-02 22:54:44 [Broker 8006 FOLLOWER] INFO: Running on localhost:8006
-2023-06-02 22:54:44 [Broker 8006 FOLLOWER] INFO: Request JOIN_CLUSTER localhost:8001
-2023-06-02 22:54:44 [Broker 8001 FOLLOWER] INFO: Forward JOIN_CLUSTER to leader: ('localhost', 8000)
-2023-06-02 22:54:44 [Broker 8000 LEADER] INFO: Sync data with peer localhost:8006
-2023-06-02 22:54:44 [Broker 8000 LEADER] INFO: New node joins the cluster localhost:8006
+2023-06-07 17:17:53 [Broker 8006 FOLLOWER] INFO: Running on localhost:8006
+2023-06-07 17:17:53 [Broker 8006 FOLLOWER] INFO: Request JOIN_CLUSTER localhost:8888
+2023-06-07 17:17:53 [ClusterManager 8888] INFO: Forward JOIN_CLUSTER to ('localhost', 8000)
+2023-06-07 17:17:53 [Broker 8000 LEADER] INFO: Sync data with peer localhost:8006
+2023-06-07 17:17:53 [Broker 8000 LEADER] INFO: New node joins the cluster localhost:8006
 
 
-==================== Publish to New Node ====================
-2023-06-02 22:54:46 [Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8006
-2023-06-02 22:54:46 [Broker 8006 FOLLOWER] INFO: New publish `topic1`: `Hello, world!`
-2023-06-02 22:54:46 [Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`
+==================== Publish ====================
+2023-06-07 17:17:55 [Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8888
+2023-06-07 17:17:55 [ClusterManager 8888] INFO: Forward PUBLISH to ('localhost', 8000)
+2023-06-07 17:17:55 [Broker 8000 LEADER] INFO: New publish `topic1`: `Hello, world!`
+2023-06-07 17:17:55 [Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`
 
 
 ==================== Node Leave ====================
-2023-06-02 22:54:47 [Broker 8000 LEADER] INFO: Node leave the cluster: localhost:8006
+2023-06-07 17:17:56 [Broker 8000 LEADER] INFO: Node leave the cluster: localhost:8006
+
 ```
 
 

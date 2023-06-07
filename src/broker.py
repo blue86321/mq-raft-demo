@@ -4,7 +4,7 @@ from threading import Thread
 from typing import Dict, List, Set, Tuple
 from src.raft import RaftNode
 
-from src.utils import BROKER_HOST, BROKER_PORT, Message, MessageTypes
+from src.utils import BROKER_HOST, BROKER_PORT, CLUSTER_HOST, CLUSTER_PORT, Message, MessageTypes
 
 
 class Broker(RaftNode):
@@ -13,15 +13,17 @@ class Broker(RaftNode):
         host: str = BROKER_HOST,
         port: int = BROKER_PORT,
         backlog: int = 5,
-        # If this node is to join an existing cluster, provide dest host and port
-        join_dest: Tuple[str, int] = None,
+        # Whether this node is to join an existing cluster
+        join = False,
+        # cluster manager
+        manager: Tuple[str, int] = (CLUSTER_HOST, CLUSTER_PORT),
         # list of peer host and port
         peers: List[Tuple[str, int]] = None,
         election_timeout: float = 0,
     ):
-        RaftNode.__init__(self, host, port, peers, election_timeout)
+        RaftNode.__init__(self, host, port, manager, peers, election_timeout)
         self.backlog = backlog
-        self.join_dest = join_dest
+        self.join = join
         # Store subscribed clients for each topic
         #  e.g. { 'topic': set((host1, port1), (host2, port2), ...) }
         self.topic_subscribers: Dict[str, Set[Tuple[str, int]]] = {}
@@ -135,9 +137,9 @@ class Broker(RaftNode):
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen(self.backlog)
 
-        if self.join_dest:
+        if self.join:
             # join an existing cluster
-            super().request_join_cluster((self.host, self.port), self.join_dest)
+            super().request_join_cluster((self.host, self.port), self.manager)
         else:
             # RaftNode run (leader election)
             super().run()

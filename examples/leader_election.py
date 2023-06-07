@@ -3,6 +3,7 @@ import time
 from typing import List
 
 from src.broker import Broker
+from src.cluster_manager import ClusterManager
 from src.utils import BROKER_HOST, BROKER_PORT
 
 logging.basicConfig(
@@ -20,6 +21,9 @@ def run(
     # broker
     host_ips = [(broker_host, broker_port), (broker_host, broker_port + 1)]
     brokers: List[Broker] = []
+
+    cluster = ClusterManager()
+    cluster.run()
 
     election_timeout = 0
     if same_election_timeout:
@@ -50,6 +54,7 @@ def run(
 
     for broker in brokers:
         broker.stop()
+    cluster.stop()
 
 
 def main():

@@ -1,11 +1,14 @@
 import time
 
 from src.broker import Broker
+from src.cluster_manager import ClusterManager
 from src.subscriber import Subscriber
 
 
 def test_subscribe():
     # broker
+    cluster = ClusterManager()
+    cluster.run()
     broker = Broker()
     broker.run()
     time.sleep(0.5)
@@ -20,12 +23,15 @@ def test_subscribe():
     # stop
     broker.stop()
     subscriber.stop()
+    cluster.stop()
 
     assert (subscriber.host, subscriber.port) in broker.topic_subscribers.get(topic)
 
 
 def test_unsubscribe():
     # broker
+    cluster = ClusterManager()
+    cluster.run()
     broker = Broker()
     broker.run()
     time.sleep(0.5)
@@ -47,3 +53,4 @@ def test_unsubscribe():
         # stop
         broker.stop()
         subscriber.stop()
+        cluster.stop()

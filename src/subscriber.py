@@ -1,26 +1,21 @@
 import logging
 import socket
 import threading
-from src.utils import (
-    BROKER_HOST,
-    BROKER_PORT,
-    SUBSCRIBER_HOST,
-    SUBSCRIBER_PORT,
-    Message,
-    MessageTypes,
-)
+
+from src.utils import (CLUSTER_HOST, CLUSTER_PORT,
+                       SUBSCRIBER_HOST, SUBSCRIBER_PORT, Message, MessageTypes)
 
 
 class Subscriber:
     def __init__(
         self,
-        broker_host: str = BROKER_HOST,
-        broker_port: int = BROKER_PORT,
+        cluster_host: str = CLUSTER_HOST,
+        cluster_port: int = CLUSTER_PORT,
         host: str = SUBSCRIBER_HOST,
         port: int = SUBSCRIBER_PORT,
     ):
-        self.broker_host = broker_host
-        self.broker_port = broker_port
+        self.cluster_host = cluster_host
+        self.cluster_port = cluster_port
         self.host = host
         self.port = port
 
@@ -35,26 +30,26 @@ class Subscriber:
         self.handle_operation(topic, MessageTypes.UNSUBSCRIBE)
 
     def handle_operation(self, topic: str, msg_type: MessageTypes) -> None:
-        """Handle the operation to send message to the broker
+        """Handle the operation to send message to the cluster
 
         Args:
             topic (str): message topic
             msg_type (MessageTypes): message type, like UN/SUBSCRIBE
         """
         self.logger.info(
-            f"{msg_type.name} message on topic `{topic}` at {self.broker_host}:{self.broker_port}"
+            f"{msg_type.name} message on topic `{topic}` at {self.cluster_host}:{self.cluster_port}"
         )
 
         # Create a message
         msg = Message(msg_type, topic, dest_host=self.host, dest_port=self.port)
 
-        # Send the message to the broker via a socket
+        # Send the message to the cluster via a socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((self.broker_host, self.broker_port))
+            s.connect((self.cluster_host, self.cluster_port))
             s.sendall(msg.to_bytes())
 
     def receive(self) -> None:
-        """Receive message from the broker"""
+        """Receive message from the cluster"""
         self.logger.info(f"Subscriber is running on {self.host}:{self.port}")
         self.recv_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # reuse to avoid OSError: [Errno 48] Address already in use
@@ -70,8 +65,8 @@ class Subscriber:
                 # Convert the received bytes to a message object
                 msg = Message.from_bytes(data)
                 if msg.type == MessageTypes.ACK:
-                    # broker ACK for a Un/Subscribe request
-                    # `msg.content` is the operation (that is, `msg.type`` sent to broker)
+                    # cluster ACK for a Un/Subscribe request
+                    # `msg.content` is the operation (that is, `msg.type`` sent to cluster)
                     self.logger.info(f"Received {msg.type.name}: {msg.content} on topic `{msg.topic}`")
                 else:
                     self.logger.info(
@@ -85,7 +80,7 @@ class Subscriber:
         threading.Thread(target=self.receive).start()
 
     def stop(self) -> None:
-        """Stop receiving messages from the broker"""
+        """Stop receiving messages from the cluster"""
         self.recv_socket.close()
 
 

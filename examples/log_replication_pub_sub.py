@@ -3,6 +3,7 @@ import time
 from typing import List
 
 from src.broker import Broker
+from src.cluster_manager import ClusterManager
 from src.publisher import Publisher
 from src.utils import BROKER_HOST, BROKER_PORT
 from src.subscriber import Subscriber
@@ -35,21 +36,23 @@ def main():
     brokers.append(broker2)
 
     print("\n\n==================== Broker ====================")
+    cluster = ClusterManager()
+    cluster.run()
     for broker in brokers:
         broker.run()
     time.sleep(2.5)
 
     topic = "topic1"
-    print("\n\n==================== Subscribe to Node 1 ====================")
+    print("\n\n==================== Subscribe ====================")
     # subscriber
-    subscriber = Subscriber(*host_ips[0])
+    subscriber = Subscriber()
     subscriber.run()
     subscriber.subscribe(topic)
     time.sleep(1)
 
-    print("\n\n==================== Publish to Node 2 ====================")
+    print("\n\n==================== Publish ====================")
     # publisher
-    publisher = Publisher(*host_ips[1])
+    publisher = Publisher()
     publisher.publish(topic, "Hello, world!")
     time.sleep(1)
 
@@ -67,6 +70,7 @@ def main():
     subscriber.stop()
     for broker in brokers:
         broker.stop()
+    cluster.stop()
 
 
 if __name__ == "__main__":

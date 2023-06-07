@@ -3,6 +3,7 @@ import time
 from typing import List
 
 from src.broker import Broker
+from src.cluster_manager import ClusterManager
 from src.publisher import Publisher
 from src.utils import BROKER_HOST, BROKER_PORT, SUBSCRIBER_PORT
 from src.subscriber import Subscriber
@@ -30,6 +31,8 @@ def test_cluster_pub_two_pub(caplog):
     brokers.append(broker2)
 
     logging.info("\n\n==================== Broker ====================")
+    cluster = ClusterManager()
+    cluster.run()
     for broker in brokers:
         broker.run()
     time.sleep(2.5)
@@ -37,18 +40,18 @@ def test_cluster_pub_two_pub(caplog):
     topic = "topic1"
     # subscriber
     subscribers = [
-        Subscriber(*host_ips[0]),
-        Subscriber(*host_ips[1], port=SUBSCRIBER_PORT + 5),
+        Subscriber(),
+        Subscriber(port=SUBSCRIBER_PORT + 5),
     ]
     for idx, sub in enumerate(subscribers):
-        logging.info(f"\n\n==================== Subscribe to Node {idx + 1} ====================")
+        logging.info(f"\n\n==================== Subscribe ====================")
         sub.run()
         sub.subscribe(topic)
     time.sleep(1)
 
-    logging.info("\n\n==================== Publish to Node 2 ====================")
+    logging.info("\n\n==================== Publish ====================")
     # publisher
-    publisher = Publisher(*host_ips[1])
+    publisher = Publisher()
     publisher.publish(topic, "Hello, world!")
     time.sleep(1)
 
@@ -67,31 +70,26 @@ def test_cluster_pub_two_pub(caplog):
         sub.stop()
     for broker in brokers:
         broker.stop()
+    cluster.stop()
 
     assert """
-[Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8000
+[Subscriber 9000] INFO: SUBSCRIBE message on topic `topic1` at localhost:8888
 """ in caplog.text
 
     assert """
-[Subscriber 9005] INFO: SUBSCRIBE message on topic `topic1` at localhost:8001
+[Subscriber 9005] INFO: SUBSCRIBE message on topic `topic1` at localhost:8888
 """ in caplog.text
 
     # Both receive a message
-    assert """==================== Publish to Node 2 ====================
-[Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8001
-[Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, world!`
-[Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`
-[Subscriber 9005] INFO: Received message: `Hello, world!` on topic `topic1`
-""" in caplog.text or """==================== Publish to Node 2 ====================
-[Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8001
-[Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, world!`
-[Subscriber 9005] INFO: Received message: `Hello, world!` on topic `topic1`
-[Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`
+    assert """==================== Publish ====================
+[Publisher] INFO: Publish to topic `topic1`: `Hello, world!` at localhost:8888
 """ in caplog.text
+    assert "[Subscriber 9000] INFO: Received message: `Hello, world!` on topic `topic1`" in caplog.text
+    assert "[Subscriber 9005] INFO: Received message: `Hello, world!` on topic `topic1`" in caplog.text
 
     # Now 9000 unsubscribe
     assert """==================== Unsubscribe and Publish ====================
-[Subscriber 9000] INFO: UNSUBSCRIBE message on topic `topic1` at localhost:8000
+[Subscriber 9000] INFO: UNSUBSCRIBE message on topic `topic1` at localhost:8888
 """ in caplog.text
 
     # Temporary inconsistent
@@ -100,10 +98,9 @@ def test_cluster_pub_two_pub(caplog):
 
     # Consistent
     assert """==================== Publish Later ====================
-[Publisher] INFO: Publish to topic `topic1`: `Hello, later` at localhost:8001
-[Broker 8001 FOLLOWER] INFO: New publish `topic1`: `Hello, later`
-[Subscriber 9005] INFO: Received message: `Hello, later` on topic `topic1`
+[Publisher] INFO: Publish to topic `topic1`: `Hello, later` at localhost:8888
 """ in caplog.text
+    assert "[Subscriber 9005] INFO: Received message: `Hello, later` on topic `topic1`" in caplog.text
 
     # Later msg will not be received by 9000
     assert """[Subscriber 9000] INFO: Received message: `Hello, later` on topic `topic1`

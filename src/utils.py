@@ -3,6 +3,9 @@ import json
 from typing import Dict, List, Set, Tuple, Union
 
 
+CLUSTER_HOST = 'localhost'
+CLUSTER_PORT = 8888
+
 BROKER_HOST = "localhost"
 BROKER_PORT = 8000
 
