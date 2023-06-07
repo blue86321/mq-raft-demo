@@ -17,11 +17,11 @@ def test_subscribe():
     subscriber.subscribe(topic)
     time.sleep(0.5)
 
-    assert (subscriber.host, subscriber.port) in broker.topic_subscribers.get(topic)
-
     # stop
     broker.stop()
     subscriber.stop()
+
+    assert (subscriber.host, subscriber.port) in broker.topic_subscribers.get(topic)
 
 
 def test_unsubscribe():
@@ -37,13 +37,13 @@ def test_unsubscribe():
     subscriber.subscribe(topic)
     time.sleep(0.5)
 
-    assert (subscriber.host, subscriber.port) in broker.topic_subscribers.get(topic)
+    try:
+        assert (subscriber.host, subscriber.port) in broker.topic_subscribers.get(topic)
 
-    subscriber.unsubscribe(topic)
-    time.sleep(0.5)
-
-    assert (subscriber.host, subscriber.port) not in broker.topic_subscribers.get(topic)
-
-    # stop
-    broker.stop()
-    subscriber.stop()
+        subscriber.unsubscribe(topic)
+        time.sleep(0.5)
+        assert (subscriber.host, subscriber.port) not in broker.topic_subscribers.get(topic)
+    finally:
+        # stop
+        broker.stop()
+        subscriber.stop()

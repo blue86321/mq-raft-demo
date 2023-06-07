@@ -32,7 +32,7 @@ def test_cluster_dynamic_membership_pub_sub(caplog):
     logging.info("\n\n==================== Broker ====================")
     for broker in brokers:
         broker.run()
-    time.sleep(2)
+    time.sleep(1.5)
 
     topic = "topic1"
     logging.info("\n\n==================== Subscribe to Node 1 ====================")
@@ -51,7 +51,7 @@ def test_cluster_dynamic_membership_pub_sub(caplog):
         election_timeout=1,
     )
     broker3.run()
-    time.sleep(2)
+    time.sleep(1.5)
 
     logging.info("\n\n==================== Publish to New Node ====================")
     # publisher
@@ -61,7 +61,7 @@ def test_cluster_dynamic_membership_pub_sub(caplog):
 
     logging.info("\n\n==================== Node Leave ====================")
     broker3.stop()
-    time.sleep(2)
+    time.sleep(1.5)
 
     # stop
     subscriber.stop()
